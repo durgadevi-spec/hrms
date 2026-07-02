@@ -79,19 +79,19 @@ router.get('/assignments/all', async (req, res) => {
     const assignments = teamMembersRes.rows.map((row, idx) => {
       const email = projEmpIdToEmail[row.employee_id];
       const code = projEmpIdToCode[row.employee_id];
-      
+
       // Try email match first, then fall back to employee_code match
       let coreEmployeeId = email ? emailToCoreId[email] : null;
       if (!coreEmployeeId && code) {
         coreEmployeeId = codeToCoreId[code];
       }
-      
+
       // If still no match, try if the employee_id itself is directly a core employee UUID
       if (!coreEmployeeId) {
         const directMatch = coreEmps.find(emp => String(emp.id) === String(row.employee_id));
         if (directMatch) coreEmployeeId = directMatch.id;
       }
-      
+
       return {
         id: `pa_${idx}`,
         projectId: row.project_id,
@@ -106,31 +106,31 @@ router.get('/assignments/all', async (req, res) => {
     return res.status(500).json({ error: err.message });
   }
 });
-router.post('/assignments', requireRole('admin', 'manager'), (_req, res) => res.json({ message: 'Assignment stored' }));
-router.delete('/assignments/:id', requireRole('admin', 'manager'), (_req, res) => res.json({ message: 'Assignment removed' }));
+router.post('/assignments', requireRole('admin', 'manager', 'hr'), (_req, res) => res.json({ message: 'Assignment stored' }));
+router.delete('/assignments/:id', requireRole('admin', 'manager', 'hr'), (_req, res) => res.json({ message: 'Assignment removed' }));
 
 // GET /api/projects
 // Admins/managers → all projects; others → their own + assigned projects
 router.get('/', async (req, res) => {
   try {
-    const role  = req.user.role;
+    const role = req.user.role;
     const email = req.user.email;
 
     let result;
-    if (role === 'admin' || role === 'manager') {
+    if (role === 'admin' || role === 'manager' || role === 'hr') {
       result = await projectsPool.query(
         'SELECT * FROM public.projects ORDER BY created_at DESC'
       );
     } else {
       // Find the employee in the external DB by email to get their external UUID
       let externalUserId = null;
-      
+
       // Try 1: Direct email lookup
       let empRes = await projectsPool.query(
         'SELECT id FROM public.employees WHERE email ILIKE $1',
         [email]
       );
-      
+
       if (empRes.rows.length > 0) {
         externalUserId = empRes.rows[0].id;
       } else {
@@ -140,7 +140,7 @@ router.get('/', async (req, res) => {
           .select('employee_id, first_name, last_name')
           .eq('official_email', email)
           .single();
-        
+
         if (coreEmp?.employee_id) {
           // Only try employee_code match if column exists
           const cols = await getProjEmpColumns();
@@ -154,7 +154,7 @@ router.get('/', async (req, res) => {
             }
           }
         }
-        
+
         // Try 3: Match by name if available
         if (!externalUserId && coreEmp?.first_name && coreEmp?.last_name) {
           empRes = await projectsPool.query(
@@ -166,12 +166,12 @@ router.get('/', async (req, res) => {
           }
         }
       }
-      
+
       if (!externalUserId) {
         // If still not found, return all public projects
         return res.json([]);
       }
-      
+
       // Get projects they created OR are assigned to as team members
       result = await projectsPool.query(
         `SELECT DISTINCT p.* FROM public.projects p
@@ -204,7 +204,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // POST /api/projects (admin / manager)
-router.post('/', requireRole('admin', 'manager'), async (req, res) => {
+router.post('/', requireRole('admin', 'manager', 'hr'), async (req, res) => {
   const { title, projectCode, clientName, description, status, startDate, endDate, location, company } = req.body;
   if (!title) return res.status(400).json({ error: 'Project title is required' });
 
@@ -242,7 +242,7 @@ router.post('/', requireRole('admin', 'manager'), async (req, res) => {
 });
 
 // PUT /api/projects/:id
-router.put('/:id', requireRole('admin', 'manager'), async (req, res) => {
+router.put('/:id', requireRole('admin', 'manager', 'hr'), async (req, res) => {
   const fields = [];
   const values = [];
   let idx = 1;
@@ -279,7 +279,7 @@ router.put('/:id', requireRole('admin', 'manager'), async (req, res) => {
 });
 
 // DELETE /api/projects/:id (admin only)
-router.delete('/:id', requireRole('admin'), async (req, res) => {
+router.delete('/:id', requireRole('admin', 'hr'), async (req, res) => {
   try {
     await projectsPool.query('DELETE FROM public.projects WHERE id = $1', [req.params.id]);
     return res.json({ message: 'Project deleted' });

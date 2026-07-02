@@ -39,7 +39,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     fetchUser();
-    
+
     const handleAuthExpired = () => {
       setUser(null);
     };
@@ -90,8 +90,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     login,
     signup,
     logout,
-    isAdmin: user?.role === 'admin',
-    isManager: user?.role === 'manager' || user?.role === 'admin',
+    isAdmin: user?.role === 'admin' || user?.role === 'hr',
+    isManager: user?.role === 'manager' || user?.role === 'admin' || user?.role === 'hr',
     isHR: user?.role === 'hr' || user?.role === 'admin',
   }), [user, isLoading, login, signup, logout]);
 

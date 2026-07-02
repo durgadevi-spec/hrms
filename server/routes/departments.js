@@ -80,7 +80,7 @@ router.put('/:id', requireRole('admin', 'hr'), async (req, res) => {
 });
 
 // DELETE /api/departments/:id  (admin only)
-router.delete('/:id', requireRole('admin'), async (req, res) => {
+router.delete('/:id', requireRole('admin', 'hr'), async (req, res) => {
   const { error } = await supabase.from('departments').delete().eq('id', req.params.id);
   if (error) return res.status(500).json({ error: error.message });
   return res.json({ message: 'Department deleted' });

@@ -300,7 +300,12 @@ router.put('/:id/personal', async (req, res) => {
 
 // PUT /api/employees/:id/job
 router.put('/:id/job', requireRole('admin', 'hr'), async (req, res) => {
-  const updateData = { ...req.body, updated_at: new Date().toISOString(), updated_by: req.user.id };
+  // The "role" field controls system access/permissions and lives in
+  // employee_system_access, not employee_job_details. Pull it out here so
+  // it doesn't get silently dropped when written to the job details table.
+  const { role, ...jobFields } = req.body;
+
+  const updateData = { ...jobFields, updated_at: new Date().toISOString(), updated_by: req.user.id };
   delete updateData.id;
   delete updateData.employee_id;
 
@@ -314,7 +319,23 @@ router.put('/:id/job', requireRole('admin', 'hr'), async (req, res) => {
   }
 
   if (result.error) return res.status(500).json({ error: result.error.message });
-  return res.json(result.data);
+
+  // Update system access role if it was included in the payload.
+  if (role !== undefined) {
+    // Only admins may grant admin access; HR can assign employee/manager/hr.
+    if (role === 'admin' && req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Only an admin can grant admin access' });
+    }
+
+    const { error: roleError } = await supabase
+      .from('employee_system_access')
+      .update({ role, updated_at: new Date().toISOString(), updated_by: req.user.id })
+      .eq('employee_id', req.params.id);
+
+    if (roleError) return res.status(500).json({ error: roleError.message });
+  }
+
+  return res.json({ ...result.data, role: role ?? undefined });
 });
 
 // PUT /api/employees/:id/salary
@@ -404,7 +425,7 @@ arrayCrudEndpoints.forEach(({ path, table }) => {
 });
 
 // PUT /api/employees/:id/deactivate
-router.put('/:id/deactivate', requireRole('admin'), async (req, res) => {
+router.put('/:id/deactivate', requireRole('admin', 'hr'), async (req, res) => {
   const { data, error } = await supabase
     .from('employee_system_access')
     .update({
@@ -421,7 +442,7 @@ router.put('/:id/deactivate', requireRole('admin'), async (req, res) => {
 });
 
 // PUT /api/employees/:id/reactivate
-router.put('/:id/reactivate', requireRole('admin'), async (req, res) => {
+router.put('/:id/reactivate', requireRole('admin', 'hr'), async (req, res) => {
   const { data, error } = await supabase
     .from('employee_system_access')
     .update({

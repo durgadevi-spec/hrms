@@ -26,7 +26,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // POST /api/tasks
-router.post('/', requireRole('admin', 'manager'), async (req, res) => {
+router.post('/', requireRole('admin', 'manager', 'hr'), async (req, res) => {
   const { title, description, projectId, assignedTo, status, priority, dueDate } = req.body;
   if (!title) return res.status(400).json({ error: 'Task title is required' });
 
@@ -89,7 +89,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // DELETE /api/tasks/:id  (admin/manager)
-router.delete('/:id', requireRole('admin', 'manager'), async (req, res) => {
+router.delete('/:id', requireRole('admin', 'manager', 'hr'), async (req, res) => {
   const { error } = await supabase.from('tasks').delete().eq('id', req.params.id);
   if (error) return res.status(500).json({ error: error.message });
   return res.json({ message: 'Task deleted' });
