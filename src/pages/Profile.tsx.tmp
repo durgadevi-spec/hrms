@@ -1,0 +1,333 @@
+import { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+import { useAssets } from '../context/AssetsContext';
+import {
+  Mail, Phone, MapPin, Calendar, Building2, Users,
+  GraduationCap, Heart, Globe, Droplets, AlertTriangle, UserX,
+  Laptop, Smartphone, CreditCard, Key, Package, CheckCircle2,
+  Clock, UserCheck, X, Shield, ArrowLeft, Edit2, ChevronRight,
+  Plus, RotateCcw, Crown, Save, Briefcase, Award, Activity,
+  FileText, TrendingUp, Star, User
+} from 'lucide-react';
+import { api } from '../lib/api';
+import { formatDate, cn } from '../utils/formatters';
+import type { AssetType } from '../types';
+
+// ─── Avatar ───────────────────────────────────────────────────────────────────
+function Avatar({ firstName, lastName, size = 'lg', color }: {
+  firstName: string; lastName: string; size?: 'sm' | 'md' | 'lg' | 'xl'; color?: string;
+}) {
+  const sizeClass = {
+    sm: 'w-9 h-9 text-xs',
+    md: 'w-11 h-11 text-sm',
+    lg: 'w-16 h-16 text-xl',
+    xl: 'w-28 h-28 text-3xl',
+  }[size];
+
+  // Deterministic color based on name
+  const colors = [
+    'from-blue-500 to-blue-700',
+    'from-violet-500 to-violet-700',
+    'from-emerald-500 to-emerald-700',
+    'from-orange-500 to-orange-700',
+    'from-pink-500 to-pink-700',
+    'from-cyan-500 to-cyan-700',
+    'from-indigo-500 to-indigo-700',
+    'from-teal-500 to-teal-700',
+  ];
+  const idx = (firstName.charCodeAt(0) + (lastName.charCodeAt(0) || 0)) % colors.length;
+  const gradient = color || colors[idx];
+
+  return (
+    <div className={cn('rounded-xl bg-gradient-to-br text-white font-bold flex items-center justify-center flex-shrink-0 shadow-sm select-none', gradient, sizeClass)}>
+      {firstName.charAt(0).toUpperCase()}{lastName.charAt(0).toUpperCase()}
+    </div>
+  );
+}
+
+// ─── Asset icons ──────────────────────────────────────────────────────────────
+const assetTypeIcon: any = {
+  laptop: Laptop, mobile: Smartphone, id_card: CreditCard, access_card: Key, other: Package,
+};
+const assetTypeColor: any = {
+  laptop: 'bg-blue-50 text-blue-600 border border-blue-100',
+  mobile: 'bg-violet-50 text-violet-600 border border-violet-100',
+  id_card: 'bg-amber-50 text-amber-600 border border-amber-100',
+  access_card: 'bg-rose-50 text-rose-600 border border-rose-100',
+  other: 'bg-gray-50 text-gray-500 border border-gray-100',
+};
+
+import EmployeeProfileForm from '../components/employees/EmployeeProfileForm';
+
+// ─── Assign Asset Modal ───────────────────────────────────────────────────────
+function AssignAssetModal({ employeeId, employeeName, onClose }: { employeeId: string; employeeName: string; onClose: () => void }) {
+  const { assets, assignAsset } = useAssets();
+  const available = assets.filter(a => a.status === 'available');
+  const [selectedId, setSelectedId] = useState('');
+  const [error, setError] = useState('');
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden border border-secondary-100">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-secondary-100 bg-primary-600 text-white">
+          <div><h2 className="text-sm font-bold">Assign Asset</h2><p className="text-xs text-primary-200 mt-0.5">To {employeeName}</p></div>
+          <button onClick={onClose} className="w-7 h-7 rounded-lg bg-white/20 hover:bg-white/30 flex items-center justify-center transition-colors"><X className="w-4 h-4" /></button>
+        </div>
+        <div className="p-5 space-y-2 max-h-72 overflow-y-auto">
+          {available.length === 0 ? (
+            <div className="py-8 text-center"><Package className="w-8 h-8 mx-auto text-secondary-300 mb-2" /><p className="text-sm text-secondary-500">No assets available</p></div>
+          ) : available.map(asset => {
+            const Icon = assetTypeIcon[asset.assetType];
+            const sel = selectedId === asset.id;
+            return (
+              <button key={asset.id} onClick={() => { setSelectedId(asset.id); setError(''); }}
+                className={cn('w-full flex items-center gap-3 p-3 rounded-xl border-2 transition-all text-left', sel ? 'border-primary-500 bg-primary-50' : 'border-secondary-200 hover:border-secondary-300')}>
+                <div className={cn('w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0', assetTypeColor[asset.assetType])}><Icon className="w-4 h-4" /></div>
+                <div className="flex-1 min-w-0"><p className="text-sm font-semibold text-secondary-900 truncate">{asset.name}</p>{asset.serialNumber && <p className="text-xs text-secondary-400">S/N: {asset.serialNumber}</p>}</div>
+                {sel && <CheckCircle2 className="w-5 h-5 text-primary-500 flex-shrink-0" />}
+              </button>
+            );
+          })}
+          {error && <p className="text-xs text-error-600">{error}</p>}
+        </div>
+        {available.length > 0 && (
+          <div className="flex gap-3 px-5 py-4 border-t border-secondary-100 bg-secondary-50">
+            <button onClick={onClose} className="flex-1 px-4 py-2 rounded-xl border border-secondary-200 text-sm font-semibold text-secondary-700 hover:bg-secondary-100 transition-colors">Cancel</button>
+            <button onClick={async () => { if (!selectedId) { setError('Select an asset'); return; } await assignAsset(selectedId, employeeId); onClose(); }}
+              className="flex-1 px-4 py-2 rounded-xl bg-primary-600 hover:bg-primary-700 text-white text-sm font-semibold flex items-center justify-center gap-1.5 transition-colors">
+              <Package className="w-3.5 h-3.5" /> Assign
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Return Asset Modal ───────────────────────────────────────────────────────
+function ReturnAssetModal({ assetName, assignmentId, onClose }: { assetName: string; assignmentId: string; onClose: () => void }) {
+  const { returnAsset } = useAssets();
+  const [condition, setCondition] = useState('good');
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-sm bg-white rounded-2xl shadow-2xl p-6 border border-secondary-100">
+        <div className="text-center mb-5">
+          <div className="w-12 h-12 rounded-xl bg-warning-100 flex items-center justify-center mx-auto mb-3"><RotateCcw className="w-6 h-6 text-warning-600" /></div>
+          <h2 className="text-base font-bold text-secondary-900">Return Asset</h2>
+          <p className="text-xs text-secondary-500 mt-1">{assetName}</p>
+        </div>
+        <div className="mb-5">
+          <label className="block text-xs font-semibold text-secondary-600 mb-1.5">Condition</label>
+          <select value={condition} onChange={e => setCondition(e.target.value)} className="w-full px-3 py-2.5 rounded-xl border border-secondary-200 bg-secondary-50 text-sm text-secondary-900 focus:outline-none focus:ring-2 focus:ring-primary-400/30 focus:border-primary-400">
+            <option value="good">Good</option><option value="minor_damage">Minor damage</option><option value="major_damage">Major damage</option><option value="lost">Lost</option>
+          </select>
+        </div>
+        <div className="flex gap-3">
+          <button onClick={onClose} className="flex-1 px-4 py-2 rounded-xl border border-secondary-200 text-sm font-semibold text-secondary-700 hover:bg-secondary-50 transition-colors">Cancel</button>
+          <button onClick={() => { returnAsset(assignmentId, condition); onClose(); }} className="flex-1 px-4 py-2 rounded-xl bg-warning-600 hover:bg-warning-700 text-white text-sm font-semibold flex items-center justify-center gap-1.5 transition-colors"><RotateCcw className="w-3.5 h-3.5" /> Return</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Deactivate Modal ─────────────────────────────────────────────────────────
+function DeactivateModal({ employeeName, onClose, onConfirm }: { employeeName: string; onClose: () => void; onConfirm: (r: string) => void }) {
+  const [reason, setReason] = useState('');
+  const [error, setError] = useState('');
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden border border-secondary-100">
+        <div className="flex items-center gap-3 px-6 py-4 border-b border-error-100 bg-error-50">
+          <div className="w-10 h-10 rounded-xl bg-error-100 flex items-center justify-center"><UserX className="w-5 h-5 text-error-600" /></div>
+          <div><h2 className="text-sm font-bold text-secondary-900">Deactivate Employee</h2><p className="text-xs text-secondary-500">Removes login access for {employeeName}</p></div>
+        </div>
+        <div className="p-6 space-y-4">
+          <div className="flex items-start gap-2.5 p-3.5 bg-error-50 rounded-xl border border-error-100">
+            <AlertTriangle className="w-4 h-4 text-error-500 mt-0.5 flex-shrink-0" />
+            <p className="text-xs text-error-700 leading-relaxed">Login access will be removed. All data is preserved and can be restored.</p>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-secondary-600 mb-1.5">Reason <span className="text-error-500">*</span></label>
+            <textarea value={reason} onChange={e => { setReason(e.target.value); setError(''); }} rows={3} placeholder="e.g. Resigned, Contract ended..." className="w-full px-3.5 py-2.5 rounded-xl border border-secondary-200 text-sm text-secondary-900 focus:outline-none focus:ring-2 focus:ring-error-400/20 focus:border-error-400 resize-none" />
+            {error && <p className="text-xs text-error-600 mt-1">{error}</p>}
+          </div>
+        </div>
+        <div className="flex gap-3 px-6 py-4 border-t border-secondary-100 bg-secondary-50">
+          <button onClick={onClose} className="flex-1 px-4 py-2 rounded-xl border border-secondary-200 text-sm font-semibold text-secondary-700 hover:bg-secondary-100 transition-colors">Cancel</button>
+          <button onClick={() => { if (!reason.trim()) { setError('Reason required'); return; } onConfirm(reason); }} className="flex-1 px-4 py-2 rounded-xl bg-error-600 hover:bg-error-700 text-white text-sm font-semibold flex items-center justify-center gap-1.5 transition-colors"><UserX className="w-3.5 h-3.5" /> Deactivate</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Profile Page ─────────────────────────────────────────────────────────────
+export default function Profile() {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const { isAdmin } = useAuth();
+  const { getEmployeeAssets } = useAssets();
+
+  const [employeeData, setEmployeeData] = useState<any>(null);
+  const [departments, setDepartments] = useState<any[]>([]);
+  const [allEmployees, setAllEmployees] = useState<any[]>([]);
+  const [tasks, setTasks] = useState<any[]>([]);
+  const [timesheets, setTimesheets] = useState<any[]>([]);
+  const [leaveRequests, setLeaveRequests] = useState<any[]>([]);
+  const [projects, setProjects] = useState<any[]>([]);
+  const [projectAssignments, setProjectAssignments] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<'info' | 'qualifications' | 'activity'>('info');
+  const [infoSubTab, setInfoSubTab] = useState<'basic' | 'emergency'>('basic');
+  const [showEdit, setShowEdit] = useState(false);
+  const [showDeactivate, setShowDeactivate] = useState(false);
+  const [showReactivate, setShowReactivate] = useState(false);
+  const [showAssignAsset, setShowAssignAsset] = useState(false);
+  const [returnTarget, setReturnTarget] = useState<{ assignmentId: string; assetName: string } | null>(null);
+
+  const fetchData = async () => {
+    if (!id) return;
+    try {
+      setIsLoading(true);
+      const [emp, depts, emps, tsk, ts, lv, prj, asgn] = await Promise.all([
+        api.get(`/api/employees/${id}`),
+        api.get('/api/departments'),
+        api.get('/api/employees'),
+        api.get(`/api/tasks?assignedTo=${id}`),
+        api.get('/api/timesheets'),
+        api.get('/api/leave-requests'),
+        api.get('/api/projects'),
+        api.get('/api/projects/assignments/all'),
+      ]);
+      // Normalize employee data: map emergencyContacts -> emergencyContact (for view)
+      if (emp) {
+        if (emp.emergencyContacts && !emp.emergencyContact) {
+          emp.emergencyContact = Array.isArray(emp.emergencyContacts) ? emp.emergencyContacts[0] : emp.emergencyContacts;
+        } else if (Array.isArray(emp.emergencyContact) && emp.emergencyContact.length > 0) {
+          emp.emergencyContact = emp.emergencyContact[0];
+        }
+      }
+      setEmployeeData(emp);
+      setDepartments(depts);
+      setAllEmployees(emps);
+      setTasks(tsk);
+      const tsArray = Array.isArray(ts) ? ts : (ts?.timeEntries || []);
+      setTimesheets(tsArray.filter((t: any) => t.employeeId === id));
+      setLeaveRequests((lv?.history || []).filter((l: any) => l.employeeId === id || l.employee_id === id));
+      setProjects(prj);
+      setProjectAssignments(asgn);
+    } catch (err) { console.error(err); }
+    finally { setIsLoading(false); }
+  };
+
+  useEffect(() => { fetchData(); }, [id]);
+
+  if (isLoading) return (
+    <div className="flex flex-col items-center justify-center py-32 gap-3">
+      <div className="w-10 h-10 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin" />
+      <p className="text-sm text-secondary-500">Loading profile...</p>
+    </div>
+  );
+
+  if (!employeeData) return (
+    <div className="flex flex-col items-center justify-center py-32 gap-4">
+      <User className="w-14 h-14 text-secondary-300" />
+      <p className="text-secondary-500 font-medium">Employee not found</p>
+      <button onClick={() => navigate(-1)} className="flex items-center gap-2 px-4 py-2 rounded-xl border border-secondary-200 text-sm font-semibold text-secondary-700 hover:bg-secondary-50 transition-colors"><ArrowLeft className="w-4 h-4" /> Go Back</button>
+    </div>
+  );
+
+  const department = departments.find(d => d.id === employeeData.departmentId);
+  const manager = allEmployees.find(e => e.id === employeeData.reportingManagerId);
+
+  // Peers: same department AND not self AND not admin/hr (actual coworkers) — only show if dept is assigned
+  const peers = employeeData.departmentId
+    ? allEmployees.filter(e => e.id !== employeeData.id && e.departmentId === employeeData.departmentId).slice(0, 5)
+    : [];
+
+  const employeeTasks = tasks.filter(t => t.assignedTo === employeeData.id);
+  const employeeTimesheets = timesheets.filter(t => t.employeeId === employeeData.id);
+  const employeeLeaves = leaveRequests.filter(l => l.employeeId === employeeData.id);
+  const employeeProjects = projectAssignments
+    .filter(pa => pa.employeeId === employeeData.id)
+    .map(pa => projects.find(p => p.id === pa.projectId))
+    .filter(Boolean);
+  const employeeAssets = getEmployeeAssets(employeeData.id);
+  const managersList = allEmployees.filter(e => ['admin', 'manager', 'hr'].includes(e.role));
+
+  const stats = {
+    totalTasks: employeeTasks.length,
+    completedTasks: employeeTasks.filter(t => t.status === 'completed').length,
+    totalHours: employeeTimesheets.reduce((acc, t) => acc + t.hoursWorked, 0),
+    approvedLeaves: employeeLeaves.filter(l => l.status === 'approved').length,
+  };
+
+  const isInactive = employeeData.status === 'inactive';
+
+  const handleSave = async (data: any) => {
+    const updated = await api.put(`/api/employees/${employeeData.id}`, data);
+    setEmployeeData(updated);
+  };
+  const handleDeactivate = async (reason: string) => {
+    try { const u = await api.put(`/api/employees/${employeeData.id}/deactivate`, { reason }); setEmployeeData(u); setShowDeactivate(false); }
+    catch (err: any) { alert(err.message); }
+  };
+  const handleReactivate = async () => {
+    try { const u = await api.put(`/api/employees/${employeeData.id}/reactivate`); setEmployeeData(u); setShowReactivate(false); }
+    catch (err: any) { alert(err.message); }
+  };
+
+  const roleColors: Record<string, string> = {
+    admin: 'bg-error-100 text-error-700',
+    manager: 'bg-warning-100 text-warning-700',
+    hr: 'bg-accent-100 text-accent-700',
+    employee: 'bg-secondary-100 text-secondary-600',
+  };
+  const statusColors: Record<string, { badge: string; dot: string }> = {
+    active: { badge: 'bg-accent-100 text-accent-700', dot: 'bg-accent-500' },
+    on_leave: { badge: 'bg-warning-100 text-warning-700', dot: 'bg-warning-500' },
+    inactive: { badge: 'bg-secondary-100 text-secondary-500', dot: 'bg-secondary-400' },
+  };
+  const sc = statusColors[employeeData.status] || statusColors.inactive;
+
+  const tabs = [
+    { key: 'info' as const, label: 'Personal Info' },
+    { key: 'qualifications' as const, label: 'Qualifications' },
+    { key: 'activity' as const, label: 'Tasks & Projects' },
+  ];
+
+  // Build emergency contacts list — server returns either emergencyContact (single) or emergencyContacts (array)
+  const emergencyContactsList: any[] = (() => {
+    if (Array.isArray(employeeData.emergencyContacts) && employeeData.emergencyContacts.length > 0) {
+      return employeeData.emergencyContacts;
+    }
+    if (employeeData.emergencyContact && typeof employeeData.emergencyContact === 'object' && !Array.isArray(employeeData.emergencyContact)) {
+      return [employeeData.emergencyContact];
+    }
+    return [];
+  })();
+
+  return (
+    <div className="animate-fade-in space-y-5 max-w-5xl">
+      {/* Back */}
+      <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-sm font-medium text-secondary-500 hover:text-secondary-800 transition-colors group">
+        <span className="w-7 h-7 rounded-lg bg-secondary-100 group-hover:bg-secondary-200 flex items-center justify-center transition-colors">
+          <ArrowLeft className="w-3.5 h-3.5 text-secondary-600" />
+        </span>
+        Back
+      </button>
+
+      {/* Deactivated Banner */}
+      {isInactive && (
+        <div className="flex items-center gap-3 p-4 bg-error-50 border border-error-200 rounded-xl">
+          <AlertTriangle className="w-5 h-5 text-error-500 flex-shrink-0" />
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-error-700">Account Deactivated</p>
+            {employeeData.deactivationReason && <p className="text-xs text-error-600 mt-0.5">{employeeData.deactivationReason}</p>}
+          </div>
+          {isAdmin && <button onClick={() => setShow
