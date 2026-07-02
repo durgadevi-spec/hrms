@@ -69,8 +69,8 @@ function AddAssetModal({ asset, onClose }: { asset?: Asset; onClose: () => void 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-md bg-white dark:bg-surface-900 rounded-2xl shadow-2xl animate-scale-in">
-        <div className="flex items-center justify-between px-6 py-5 border-b border-surface-200 dark:border-surface-800">
+      <div className="relative w-full max-w-2xl max-h-[85vh] bg-white dark:bg-surface-900 rounded-2xl shadow-2xl animate-scale-in flex flex-col">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-surface-200 dark:border-surface-800 flex-shrink-0">
           <h2 className="text-lg font-bold text-secondary-900 dark:text-white">
             {asset ? 'Edit Asset' : 'Add New Asset'}
           </h2>
@@ -79,58 +79,54 @@ function AddAssetModal({ asset, onClose }: { asset?: Asset; onClose: () => void 
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          {error && <p className="text-sm text-error-600 bg-error-50 p-3 rounded-lg">{error}</p>}
-          
-          <div>
-            <label className="block text-sm font-medium text-secondary-700 dark:text-surface-300 mb-1.5">Asset Name *</label>
-            <input required value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="input-field" placeholder="MacBook Pro M2" />
-          </div>
-          
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-secondary-700 dark:text-surface-300 mb-1.5">Type</label>
-              <select value={formData.assetType} onChange={e => setFormData({...formData, assetType: e.target.value})} className="input-field">
-                <option value="laptop">Laptop</option>
-                <option value="mobile">Mobile</option>
-                <option value="id_card">ID Card</option>
-                <option value="access_card">Access Card</option>
-                <option value="other">Other</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-secondary-700 dark:text-surface-300 mb-1.5">Status</label>
-              <select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})} className="input-field">
-                <option value="available">Available</option>
-                <option value="assigned">Assigned</option>
-                <option value="damaged">Damaged</option>
-                <option value="returned">Returned</option>
-              </select>
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+          <div className="p-6 space-y-4 overflow-y-auto">
+            {error && <p className="text-sm text-error-600 bg-error-50 p-3 rounded-lg">{error}</p>}
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="col-span-2">
+                <label className="block text-sm font-medium text-secondary-700 dark:text-surface-300 mb-1.5">Asset Name *</label>
+                <input required value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} className="input-field" placeholder="MacBook Pro M2" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-secondary-700 dark:text-surface-300 mb-1.5">Type</label>
+                <select value={formData.assetType} onChange={e => setFormData({ ...formData, assetType: e.target.value })} className="input-field">
+                  <option value="laptop">Laptop</option>
+                  <option value="mobile">Mobile</option>
+                  <option value="id_card">ID Card</option>
+                  <option value="access_card">Access Card</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-secondary-700 dark:text-surface-300 mb-1.5">Status</label>
+                <select value={formData.status} onChange={e => setFormData({ ...formData, status: e.target.value })} className="input-field">
+                  <option value="available">Available</option>
+                  <option value="assigned">Assigned</option>
+                  <option value="damaged">Damaged</option>
+                  <option value="returned">Returned</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-secondary-700 dark:text-surface-300 mb-1.5">Serial Number</label>
+                <input value={formData.serialNumber} onChange={e => setFormData({ ...formData, serialNumber: e.target.value })} className="input-field" placeholder="e.g. C02XABCDXYZ" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-secondary-700 dark:text-surface-300 mb-1.5">Purchase Date</label>
+                <input type="date" value={formData.purchaseDate} onChange={e => setFormData({ ...formData, purchaseDate: e.target.value })} className="input-field" />
+              </div>
+              <div className="col-span-2">
+                <label className="block text-sm font-medium text-secondary-700 dark:text-surface-300 mb-1.5">Location</label>
+                <input value={formData.location} onChange={e => setFormData({ ...formData, location: e.target.value })} className="input-field" placeholder="e.g. Head Office" />
+              </div>
+              <div className="col-span-2">
+                <label className="block text-sm font-medium text-secondary-700 dark:text-surface-300 mb-1.5">Description</label>
+                <textarea value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} className="input-field resize-none h-16" placeholder="Details about the asset..." />
+              </div>
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-secondary-700 dark:text-surface-300 mb-1.5">Serial Number</label>
-            <input value={formData.serialNumber} onChange={e => setFormData({...formData, serialNumber: e.target.value})} className="input-field" placeholder="e.g. C02XABCDXYZ" />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-secondary-700 dark:text-surface-300 mb-1.5">Purchase Date</label>
-              <input type="date" value={formData.purchaseDate} onChange={e => setFormData({...formData, purchaseDate: e.target.value})} className="input-field" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-secondary-700 dark:text-surface-300 mb-1.5">Location</label>
-              <input value={formData.location} onChange={e => setFormData({...formData, location: e.target.value})} className="input-field" placeholder="e.g. Head Office" />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-secondary-700 dark:text-surface-300 mb-1.5">Description</label>
-            <textarea value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} className="input-field resize-none h-20" placeholder="Details about the asset..." />
-          </div>
-
-          <div className="flex gap-3 pt-2">
+          <div className="flex gap-3 px-6 py-4 border-t border-surface-200 dark:border-surface-800 flex-shrink-0">
             <button type="button" onClick={onClose} className="btn-secondary flex-1">Cancel</button>
             <button type="submit" disabled={isSubmitting} className="btn-primary flex-1">
               {isSubmitting ? 'Saving...' : 'Save Asset'}
@@ -158,9 +154,9 @@ function AssignEmployeeModal({ asset, onClose }: { asset: Asset; onClose: () => 
   const activeEmployees = employees.filter(e => String(e.status || '').toLowerCase() === 'active');
   const filtered = search
     ? activeEmployees.filter(e =>
-        `${e.firstName} ${e.lastName}`.toLowerCase().includes(search.toLowerCase()) ||
-        e.designation.toLowerCase().includes(search.toLowerCase())
-      )
+      `${e.firstName} ${e.lastName}`.toLowerCase().includes(search.toLowerCase()) ||
+      e.designation.toLowerCase().includes(search.toLowerCase())
+    )
     : activeEmployees;
 
   const handleAssign = async () => {
@@ -345,7 +341,7 @@ export default function Assets() {
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
   const [sortField, setSortField] = useState<string>('name');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
-  
+
   const toggleSort = (field: string) => {
     if (sortField === field) {
       setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
@@ -370,9 +366,9 @@ export default function Assets() {
     let filtered = isAdmin
       ? assets
       : assets.filter(a => {
-          const assignment = assignments.find((aa: any) => aa.assetId === a.id && !aa.returnedDate);
-          return assignment?.employeeId === user?.id;
-        });
+        const assignment = assignments.find((aa: any) => aa.assetId === a.id && !aa.returnedDate);
+        return assignment?.employeeId === user?.id;
+      });
 
     if (search) {
       const term = search.toLowerCase();
@@ -406,7 +402,7 @@ export default function Assets() {
       }
       if (typeof aVal === 'string') aVal = aVal.toLowerCase();
       if (typeof bVal === 'string') bVal = bVal.toLowerCase();
-      
+
       if (aVal < bVal) return sortDir === 'asc' ? -1 : 1;
       if (aVal > bVal) return sortDir === 'asc' ? 1 : -1;
       return 0;
@@ -426,8 +422,8 @@ export default function Assets() {
     <div className="animate-fade-in space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-secondary-900 dark:text-white">Asset Management</h1>
-          <p className="text-secondary-600 dark:text-surface-400 mt-1">Track and manage company assets</p>
+          <h1 className="text-2xl font-bold text-secondary-900 dark:text-white">{isAdmin ? 'Asset Management' : 'My Assets'}</h1>
+          <p className="text-secondary-600 dark:text-surface-400 mt-1">{isAdmin ? 'Track and manage company assets' : 'Assets assigned to you'}</p>
         </div>
         {isAdmin && (
           <button onClick={() => setShowAddModal(true)} className="btn-primary">
@@ -437,32 +433,34 @@ export default function Assets() {
         )}
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        {[
-          { label: 'Total Assets', value: stats.total, icon: Package, color: 'primary' },
-          { label: 'Available', value: stats.available, icon: CheckCircle2, color: 'success' },
-          { label: 'Assigned', value: stats.assigned, icon: Users, color: 'warning' },
-          { label: 'Laptops', value: stats.laptops, icon: Laptop, color: 'accent' },
-        ].map((s, i) => (
-          <div key={i} className="card p-5">
-            <div className="flex items-center gap-3">
-              <div className={cn('w-10 h-10 rounded-lg flex items-center justify-center',
-                s.color === 'primary' ? 'bg-primary-100 text-primary-600' :
-                s.color === 'success' ? 'bg-success-100 text-success-600' :
-                s.color === 'warning' ? 'bg-warning-100 text-warning-600' :
-                'bg-accent-100 text-accent-600'
-              )}>
-                <s.icon className="w-5 h-5" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-secondary-900 dark:text-white">{s.value}</p>
-                <p className="text-sm text-secondary-600 dark:text-surface-400">{s.label}</p>
+      {/* Stats (company-wide — admin only) */}
+      {isAdmin && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          {[
+            { label: 'Total Assets', value: stats.total, icon: Package, color: 'primary' },
+            { label: 'Available', value: stats.available, icon: CheckCircle2, color: 'success' },
+            { label: 'Assigned', value: stats.assigned, icon: Users, color: 'warning' },
+            { label: 'Laptops', value: stats.laptops, icon: Laptop, color: 'accent' },
+          ].map((s, i) => (
+            <div key={i} className="card p-5">
+              <div className="flex items-center gap-3">
+                <div className={cn('w-10 h-10 rounded-lg flex items-center justify-center',
+                  s.color === 'primary' ? 'bg-primary-100 text-primary-600' :
+                    s.color === 'success' ? 'bg-success-100 text-success-600' :
+                      s.color === 'warning' ? 'bg-warning-100 text-warning-600' :
+                        'bg-accent-100 text-accent-600'
+                )}>
+                  <s.icon className="w-5 h-5" />
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-secondary-900 dark:text-white">{s.value}</p>
+                  <p className="text-sm text-secondary-600 dark:text-surface-400">{s.label}</p>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
       {/* Filters */}
       <div className="card p-4">
@@ -477,20 +475,24 @@ export default function Assets() {
               className="input-field pl-10"
             />
           </div>
-          <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)} className="input-field w-full sm:w-36">
-            <option value="all">All Types</option>
-            <option value="laptop">Laptop</option>
-            <option value="mobile">Mobile</option>
-            <option value="id_card">ID Card</option>
-            <option value="access_card">Access Card</option>
-            <option value="other">Other</option>
-          </select>
-          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="input-field w-full sm:w-36">
-            <option value="all">All Status</option>
-            <option value="available">Available</option>
-            <option value="assigned">Assigned</option>
-            <option value="damaged">Damaged</option>
-          </select>
+          {isAdmin && (
+            <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)} className="input-field w-full sm:w-36">
+              <option value="all">All Types</option>
+              <option value="laptop">Laptop</option>
+              <option value="mobile">Mobile</option>
+              <option value="id_card">ID Card</option>
+              <option value="access_card">Access Card</option>
+              <option value="other">Other</option>
+            </select>
+          )}
+          {isAdmin && (
+            <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="input-field w-full sm:w-36">
+              <option value="all">All Status</option>
+              <option value="available">Available</option>
+              <option value="assigned">Assigned</option>
+              <option value="damaged">Damaged</option>
+            </select>
+          )}
           {isAdmin && (
             <select value={employeeFilter} onChange={e => setEmployeeFilter(e.target.value)} className="input-field w-full sm:w-48">
               <option value="all">All Employees</option>
@@ -500,15 +502,15 @@ export default function Assets() {
             </select>
           )}
           <div className="flex bg-surface-100 dark:bg-surface-800 rounded-lg p-1 shrink-0">
-            <button 
-              onClick={() => setViewMode('list')} 
+            <button
+              onClick={() => setViewMode('list')}
               className={cn('p-1.5 rounded-md transition-colors', viewMode === 'list' ? 'bg-white dark:bg-surface-700 shadow-sm' : 'text-secondary-500 hover:text-secondary-700')}
               title="List View"
             >
               <List className="w-5 h-5" />
             </button>
-            <button 
-              onClick={() => setViewMode('grid')} 
+            <button
+              onClick={() => setViewMode('grid')}
               className={cn('p-1.5 rounded-md transition-colors', viewMode === 'grid' ? 'bg-white dark:bg-surface-700 shadow-sm' : 'text-secondary-500 hover:text-secondary-700')}
               title="Grid View"
             >
@@ -647,105 +649,105 @@ export default function Assets() {
           </div>
         </div>
       ) : (
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {userVisibleAssets.length === 0 ? (
-          <div className="col-span-full card p-12 text-center">
-            <Package className="w-12 h-12 mx-auto text-secondary-300 mb-3" />
-            <p className="text-secondary-400">No assets found</p>
-          </div>
-        ) : (
-          userVisibleAssets.map(asset => {
-            const typeConfig = assetTypeConfig[asset.assetType as AssetType] || assetTypeConfig.other;
-            const statusConf = getStatusConf(asset.status);
-            const TypeIcon = typeConfig.icon;
-            const assignment = getAssignment(asset.id);
-            const assignedEmployee = assignment ? (employees.find((e: any) => e.id === assignment.employeeId) || employees.find((e: any) => e.employeeId === assignment.employeeId)) : null;
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {userVisibleAssets.length === 0 ? (
+            <div className="col-span-full card p-12 text-center">
+              <Package className="w-12 h-12 mx-auto text-secondary-300 mb-3" />
+              <p className="text-secondary-400">No assets found</p>
+            </div>
+          ) : (
+            userVisibleAssets.map(asset => {
+              const typeConfig = assetTypeConfig[asset.assetType as AssetType] || assetTypeConfig.other;
+              const statusConf = getStatusConf(asset.status);
+              const TypeIcon = typeConfig.icon;
+              const assignment = getAssignment(asset.id);
+              const assignedEmployee = assignment ? (employees.find((e: any) => e.id === assignment.employeeId) || employees.find((e: any) => e.employeeId === assignment.employeeId)) : null;
 
-            return (
-              <div key={asset.id} className="card p-5 flex flex-col gap-4">
-                <div className="flex items-start justify-between">
-                  <div className={cn('w-12 h-12 rounded-xl flex items-center justify-center shadow-sm', typeConfig.color)}>
-                    <TypeIcon className="w-6 h-6" />
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className={cn('badge', statusConf.color)}>{statusConf.label}</span>
-                    {isAdmin && (
-                      <div className="flex items-center gap-0.5">
-                        <button
-                          onClick={() => setEditTarget(asset as any)}
-                          className="p-1.5 rounded-lg text-secondary-400 hover:text-primary-600 hover:bg-primary-50 transition-colors"
-                          title="Edit asset"
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => setDeleteTarget(asset as any)}
-                          className="p-1.5 rounded-lg text-secondary-400 hover:text-error-600 hover:bg-error-50 transition-colors"
-                          title="Delete asset"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div>
-                  <h3 className="text-base font-semibold text-secondary-900 dark:text-white">{asset.name}</h3>
-                  {asset.serialNumber && (
-                    <p className="text-xs text-secondary-500 mt-0.5">S/N: {asset.serialNumber}</p>
-                  )}
-                  {asset.description && (
-                    <p className="text-sm text-secondary-600 dark:text-surface-400 mt-1 line-clamp-2">{asset.description}</p>
-                  )}
-                </div>
-
-                {/* Assigned-to section */}
-                {assignedEmployee ? (
-                  <div className="pt-3 border-t border-surface-100 dark:border-surface-800">
-                    <p className="text-xs text-secondary-400 uppercase tracking-wider mb-2">Assigned To</p>
-                    <div className="flex items-center gap-2">
-                      <button
-                        className="flex items-center gap-2 flex-1 min-w-0 hover:opacity-80 transition-opacity"
-                        onClick={() => navigate(`/profile/${assignedEmployee.id}`)}
-                      >
-                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary-400 to-accent-500 text-white flex items-center justify-center text-xs font-bold flex-shrink-0">
-                          {assignedEmployee.firstName.charAt(0)}
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium text-secondary-900 dark:text-white truncate">{assignedEmployee.firstName} {assignedEmployee.lastName}</p>
-                          <p className="text-xs text-secondary-500">Since {formatDate(assignment!.assignedDate)}</p>
-                        </div>
-                      </button>
+              return (
+                <div key={asset.id} className="card p-5 flex flex-col gap-4">
+                  <div className="flex items-start justify-between">
+                    <div className={cn('w-12 h-12 rounded-xl flex items-center justify-center shadow-sm', typeConfig.color)}>
+                      <TypeIcon className="w-6 h-6" />
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className={cn('badge', statusConf.color)}>{statusConf.label}</span>
                       {isAdmin && (
-                        <button
-                          onClick={() => setReturnTarget({ assignmentId: assignment!.id, assetName: asset.name })}
-                          className="flex items-center gap-1 text-xs text-warning-600 hover:text-warning-700 font-medium px-2 py-1 rounded-lg hover:bg-warning-50 transition-colors flex-shrink-0"
-                        >
-                          <RotateCcw className="w-3.5 h-3.5" />
-                          Return
-                        </button>
+                        <div className="flex items-center gap-0.5">
+                          <button
+                            onClick={() => setEditTarget(asset as any)}
+                            className="p-1.5 rounded-lg text-secondary-400 hover:text-primary-600 hover:bg-primary-50 transition-colors"
+                            title="Edit asset"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => setDeleteTarget(asset as any)}
+                            className="p-1.5 rounded-lg text-secondary-400 hover:text-error-600 hover:bg-error-50 transition-colors"
+                            title="Delete asset"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       )}
                     </div>
                   </div>
-                ) : (
-                  asset.status === 'available' && isAdmin && (
+
+                  <div>
+                    <h3 className="text-base font-semibold text-secondary-900 dark:text-white">{asset.name}</h3>
+                    {asset.serialNumber && (
+                      <p className="text-xs text-secondary-500 mt-0.5">S/N: {asset.serialNumber}</p>
+                    )}
+                    {asset.description && (
+                      <p className="text-sm text-secondary-600 dark:text-surface-400 mt-1 line-clamp-2">{asset.description}</p>
+                    )}
+                  </div>
+
+                  {/* Assigned-to section */}
+                  {assignedEmployee ? (
                     <div className="pt-3 border-t border-surface-100 dark:border-surface-800">
-                      <button
-                        onClick={() => setAssignTarget(asset as any)}
-                        className="w-full flex items-center justify-center gap-2 py-2 text-sm font-medium text-primary-600 border border-primary-200 dark:border-primary-800 rounded-lg hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors"
-                      >
-                        <Users className="w-4 h-4" />
-                        Assign to Employee
-                      </button>
+                      <p className="text-xs text-secondary-400 uppercase tracking-wider mb-2">Assigned To</p>
+                      <div className="flex items-center gap-2">
+                        <button
+                          className="flex items-center gap-2 flex-1 min-w-0 hover:opacity-80 transition-opacity"
+                          onClick={() => navigate(`/profile/${assignedEmployee.id}`)}
+                        >
+                          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary-400 to-accent-500 text-white flex items-center justify-center text-xs font-bold flex-shrink-0">
+                            {assignedEmployee.firstName.charAt(0)}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-secondary-900 dark:text-white truncate">{assignedEmployee.firstName} {assignedEmployee.lastName}</p>
+                            <p className="text-xs text-secondary-500">Since {formatDate(assignment!.assignedDate)}</p>
+                          </div>
+                        </button>
+                        {isAdmin && (
+                          <button
+                            onClick={() => setReturnTarget({ assignmentId: assignment!.id, assetName: asset.name })}
+                            className="flex items-center gap-1 text-xs text-warning-600 hover:text-warning-700 font-medium px-2 py-1 rounded-lg hover:bg-warning-50 transition-colors flex-shrink-0"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5" />
+                            Return
+                          </button>
+                        )}
+                      </div>
                     </div>
-                  )
-                )}
-              </div>
-            );
-          })
-        )}
-      </div>
+                  ) : (
+                    asset.status === 'available' && isAdmin && (
+                      <div className="pt-3 border-t border-surface-100 dark:border-surface-800">
+                        <button
+                          onClick={() => setAssignTarget(asset as any)}
+                          className="w-full flex items-center justify-center gap-2 py-2 text-sm font-medium text-primary-600 border border-primary-200 dark:border-primary-800 rounded-lg hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors"
+                        >
+                          <Users className="w-4 h-4" />
+                          Assign to Employee
+                        </button>
+                      </div>
+                    )
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
       )}
 
       {showAddModal && <AddAssetModal onClose={() => setShowAddModal(false)} />}

@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useAuth } from '../../context/AuthContext';
+import { useAssets } from '../../context/AssetsContext';
 import { cn } from '../../utils/formatters';
 
 // Import sub-forms (we will create these next)
@@ -52,6 +53,7 @@ const SECTIONS = [
 
 export default function EmployeeProfileForm({ initialData, onClose, onSaved }: EmployeeProfileFormProps) {
   const { isAdmin } = useAuth();
+  const { refresh: refreshAssets } = useAssets();
 
   // Filter sections based on permissions
   const sections = SECTIONS.filter(s => !s.adminOnly || isAdmin);
@@ -293,8 +295,9 @@ export default function EmployeeProfileForm({ initialData, onClose, onSaved }: E
       // 4. Update Salary Details (Admin only)
       try {
         if (isAdmin && Object.keys(formData.salary).length > 0) {
+          const rawSalary = formData.salary.baseSalary;
           const salaryPayload = {
-            basic_salary: formData.salary.baseSalary,
+            basic_salary: rawSalary === '' || rawSalary === null || rawSalary === undefined ? null : Number(rawSalary),
             currency: formData.salary.currency || 'USD',
             bank_name: formData.salary.bankName,
             account_number: formData.salary.bankAccountNumber,
@@ -439,12 +442,14 @@ export default function EmployeeProfileForm({ initialData, onClose, onSaved }: E
 
       // 10. Save Assets
       try {
+        let assetsSaved = false;
         for (const asset of formData.assets) {
           if (!asset.id && asset.fromPool && asset.assetId) {
             await api.post('/api/assets/assign', {
               assetId: asset.assetId,
               employeeId: empId,
             });
+            assetsSaved = true;
           } else if (!asset.id && !asset.fromPool) {
             await api.post(`/api/employees/${empId}/assets`, {
               asset_name: asset.assetName,
@@ -453,7 +458,20 @@ export default function EmployeeProfileForm({ initialData, onClose, onSaved }: E
               assigned_date: asset.issueDate,
               status: asset.status ? asset.status.charAt(0).toUpperCase() + asset.status.slice(1).toLowerCase() : 'Assigned',
             });
+            assetsSaved = true;
           }
+        }
+        // The assignments above were made directly via the API, bypassing
+        // AssetsContext's own assignAsset() helper, so its cached
+        // `assignments`/`assets` state is now stale. Without this refresh,
+        // reopening this form (or the Assets page) would still show the
+        // asset as "available" / not-yet-assigned even though it was saved,
+        // making it look like the assignment was lost.
+        if (assetsSaved) {
+          await refreshAssets();
+          // Clear staged assets now that they're persisted, so they don't
+          // keep showing under "New Assignments (pending save)".
+          setFormData(prev => ({ ...prev, assets: [] }));
         }
       } catch (e: any) {
         console.error('[Save] Assets save failed:', e.message);

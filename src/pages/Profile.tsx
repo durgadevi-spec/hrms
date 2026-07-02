@@ -283,21 +283,12 @@ export default function Profile() {
     : [];
 
   const employeeTasks = tasks.filter(t => t.assignedTo === employeeData.id);
-  const employeeTimesheets = timesheets.filter(t => t.employeeId === employeeData.id);
-  const employeeLeaves = leaveRequests.filter(l => l.employeeId === employeeData.id);
   const employeeProjects = projectAssignments
     .filter(pa => pa.employeeId === employeeData.id)
     .map(pa => projects.find(p => p.id === pa.projectId))
     .filter(Boolean);
   const employeeAssets = getEmployeeAssets(employeeData.id);
   const managersList = allEmployees.filter(e => ['admin', 'manager', 'hr'].includes(e.role));
-
-  const stats = {
-    totalTasks: employeeTasks.length,
-    completedTasks: employeeTasks.filter(t => t.status === 'completed').length,
-    totalHours: employeeTimesheets.reduce((acc, t) => acc + t.hoursWorked, 0),
-    approvedLeaves: employeeLeaves.filter(l => l.status === 'approved').length,
-  };
 
   const isInactive = employeeData.status === 'inactive';
 
@@ -442,21 +433,6 @@ export default function Profile() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            {[
-              { label: 'Tasks', value: stats.totalTasks, sub: stats.completedTasks + ' done', color: 'text-primary-600', bg: 'bg-primary-50 border-primary-100' },
-              { label: 'Hours', value: stats.totalHours + 'h', sub: 'logged', color: 'text-accent-600', bg: 'bg-accent-50 border-accent-100' },
-              { label: 'Leaves', value: stats.approvedLeaves, sub: 'approved', color: 'text-warning-600', bg: 'bg-warning-50 border-warning-100' },
-              { label: 'Projects', value: employeeProjects.length, sub: 'assigned', color: 'text-error-600', bg: 'bg-error-50 border-error-100' },
-            ].map(s => (
-              <div key={s.label} className={cn('rounded-xl border p-3.5', s.bg)}>
-                <p className={cn('text-xl font-bold', s.color)}>{s.value}</p>
-                <p className="text-xs font-semibold text-secondary-700 mt-0.5">{s.label}</p>
-                <p className="text-[10px] text-secondary-400">{s.sub}</p>
-              </div>
-            ))}
-          </div>
-
           {manager && (
             <div className="bg-white rounded-2xl border border-secondary-100 shadow-soft p-4">
               <p className="text-[10px] font-bold uppercase tracking-widest text-secondary-400 mb-3 flex items-center gap-1.5"><Crown className="w-3 h-3" /> Reporting Manager</p>
@@ -470,21 +446,6 @@ export default function Profile() {
               </div>
             </div>
           )}
-
-          <div className="bg-white rounded-2xl border border-secondary-100 shadow-soft p-4">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-secondary-400 mb-3">Leave Balance</p>
-            <div className="space-y-2.5">
-              {[
-                { label: 'Paid Leave', value: employeeData.paidLeaveBalance, color: 'bg-primary-500' },
-                { label: 'Sick Leave', value: employeeData.sickLeaveBalance, color: 'bg-error-400' },
-              ].map(({ label, value, color }) => (
-                <div key={label} className="flex items-center justify-between">
-                  <div className="flex items-center gap-2"><div className={cn('w-2 h-2 rounded-full', color)} /><span className="text-xs text-secondary-600">{label}</span></div>
-                  <span className="text-sm font-bold text-secondary-800">{value} <span className="text-xs font-normal text-secondary-400">days</span></span>
-                </div>
-              ))}
-            </div>
-          </div>
 
           {isAdmin && !isInactive && (
             <button onClick={() => setShowDeactivate(true)} className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-error-200 text-error-700 text-sm font-semibold hover:bg-error-50 transition-colors">
