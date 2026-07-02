@@ -31,7 +31,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 }
 
 function AppRoutes() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, isAdmin, user } = useAuth();
 
   if (isLoading) {
     return (
@@ -41,10 +41,12 @@ function AppRoutes() {
     );
   }
 
+  const homePath = isAdmin ? '/admin' : `/profile/${user?.id}`;
+
   return (
     <Routes>
-      <Route path="/login" element={isAuthenticated ? <Navigate to="/admin" replace /> : <Login />} />
-      <Route path="/signup" element={isAuthenticated ? <Navigate to="/admin" replace /> : <Signup />} />
+      <Route path="/login" element={isAuthenticated ? <Navigate to={homePath} replace /> : <Login />} />
+      <Route path="/signup" element={isAuthenticated ? <Navigate to={homePath} replace /> : <Signup />} />
       <Route element={
         <ProtectedRoute>
           <Layout />
@@ -61,7 +63,7 @@ function AppRoutes() {
         <Route path="/profile/:id" element={<Profile />} />
         <Route path="/settings" element={<Settings />} />
       </Route>
-      <Route path="*" element={<Navigate to={isAuthenticated ? '/admin' : '/login'} replace />} />
+      <Route path="*" element={<Navigate to={isAuthenticated ? homePath : '/login'} replace />} />
     </Routes>
   );
 }

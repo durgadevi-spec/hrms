@@ -102,15 +102,16 @@ router.post('/activate', async (req, res) => {
     { expiresIn: '7d' }
   );
 
-  return res.json({ 
-    token, 
-    employee: sanitizeEmployee({ 
-      ...emp, 
-      ...job, 
-      email: access.login_email, 
-      role: access.role, 
-      status: access.account_status 
-    }) 
+  return res.json({
+    token,
+    employee: sanitizeEmployee({
+      ...emp,
+      ...job,
+      id: emp.id, // job.id (employee_job_details PK) must not overwrite the employee's real id
+      email: access.login_email,
+      role: access.role,
+      status: access.account_status
+    })
   });
 });
 
@@ -166,12 +167,13 @@ router.post('/login', async (req, res) => {
 
   return res.json({
     token,
-    employee: sanitizeEmployee({ 
-      ...emp, 
-      ...job, 
-      email: access.login_email, 
-      role: access.role, 
-      status: access.account_status 
+    employee: sanitizeEmployee({
+      ...emp,
+      ...job,
+      id: emp.id, // job.id (employee_job_details PK) must not overwrite the employee's real id
+      email: access.login_email,
+      role: access.role,
+      status: access.account_status
     }),
   });
 });
@@ -291,12 +293,13 @@ router.get('/me', authMiddleware, async (req, res) => {
     .eq('employee_id', emp.id)
     .maybeSingle();
 
-  return res.json(sanitizeEmployee({ 
-    ...emp, 
-    ...job, 
-    email: access?.login_email, 
-    role: access?.role, 
-    status: access?.account_status 
+  return res.json(sanitizeEmployee({
+    ...emp,
+    ...job,
+    id: emp.id, // job.id (employee_job_details PK) must not overwrite the employee's real id
+    email: access?.login_email,
+    role: access?.role,
+    status: access?.account_status
   }));
 });
 
