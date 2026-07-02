@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 import { api } from '../lib/api';
+import { useAuth } from './AuthContext';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -48,6 +49,7 @@ interface AssetsContextType {
 const AssetsContext = createContext<AssetsContextType | undefined>(undefined);
 
 export function AssetsProvider({ children }: { children: ReactNode }) {
+  const { isAuthenticated } = useAuth();
   const [assets, setAssets] = useState<Asset[]>([]);
   const [assignments, setAssignments] = useState<AssetAssignment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -55,6 +57,8 @@ export function AssetsProvider({ children }: { children: ReactNode }) {
 
   const fetchAll = useCallback(async () => {
     if (!localStorage.getItem('token')) {
+      setAssets([]);
+      setAssignments([]);
       setIsLoading(false);
       return;
     }
@@ -80,9 +84,11 @@ export function AssetsProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // Re-fetch whenever auth state flips (e.g. login/logout without a full page reload),
+  // not just once when the provider first mounts.
   useEffect(() => {
     fetchAll();
-  }, [fetchAll]);
+  }, [fetchAll, isAuthenticated]);
 
   // ── CRUD ────────────────────────────────────────────────────────────────────
 

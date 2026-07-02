@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 import type { Department } from '../types';
 import { api } from '../lib/api';
+import { useAuth } from './AuthContext';
 
 interface DepartmentsContextType {
   departments: Department[];
@@ -14,12 +15,13 @@ interface DepartmentsContextType {
 const DepartmentsContext = createContext<DepartmentsContextType | undefined>(undefined);
 
 export function DepartmentsProvider({ children }: { children: ReactNode }) {
+  const { isAuthenticated } = useAuth();
   const [departments, setDepartments] = useState<Department[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchDepartments = useCallback(async () => {
     try {
-      if (!localStorage.getItem('token')) return;
+      if (!localStorage.getItem('token')) { setDepartments([]); setIsLoading(false); return; }
       setIsLoading(true);
       const data = await api.get('/api/departments');
       setDepartments(data);
@@ -30,9 +32,11 @@ export function DepartmentsProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // Re-fetch whenever auth state flips (e.g. login/logout without a full page reload),
+  // not just once when the provider first mounts.
   useEffect(() => {
     fetchDepartments();
-  }, [fetchDepartments]);
+  }, [fetchDepartments, isAuthenticated]);
 
   const addDepartment = async (dept: Omit<Department, 'id'>) => {
     await api.post('/api/departments', dept);
