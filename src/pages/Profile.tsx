@@ -786,68 +786,97 @@ export default function Profile() {
         </div>
       </div>
 
-      {showEdit && (
-        <EmployeeProfileForm
-          initialData={{
-            id: employeeData.id,
-            personal: {
-              firstName: employeeData.firstName,
-              lastName: employeeData.lastName,
-              officialEmail: employeeData.email,
-              personalEmail: employeeData.personalEmail,
-              profilePicture: employeeData.profilePicture,
-              phone: employeeData.mobileNumber,
-              dateOfBirth: employeeData.dateOfBirth,
-              gender: employeeData.gender,
-              bloodGroup: employeeData.bloodGroup,
-              maritalStatus: employeeData.maritalStatus,
-              nationality: employeeData.nationality,
-              nationalId: employeeData.nationalId,
-              currentAddress: employeeData.currentAddress || employeeData.address,
-              permanentAddress: employeeData.permanentAddress,
-              aadhaarNumber: employeeData.aadhaarNumber,
-              panNumber: employeeData.panNumber,
-              passportNumber: employeeData.passportNumber,
-              passportIssueDate: employeeData.passportIssueDate,
-              passportExpiryDate: employeeData.passportExpiryDate,
-              visaNumber: employeeData.visaNumber,
-              visaType: employeeData.visaType,
-              visaCountry: employeeData.visaCountry,
-              visaStatus: employeeData.visaStatus,
-              visaIssueDate: employeeData.visaIssueDate,
-              visaExpiryDate: employeeData.visaExpiryDate,
-            },
-            job: {
-              employeeId: employeeData.employeeId,
-              designation: employeeData.designation,
-              departmentId: employeeData.departmentId,
-              reportingManagerId: employeeData.reportingManagerId,
-              joiningDate: employeeData.joiningDate,
-              role: employeeData.role,
-              employmentStatus: employeeData.status,
-              employmentType: employeeData.employmentType,
-              workLocation: employeeData.workLocation,
-            },
-            salary: employeeData.salaryDetails || {},
-            education: employeeData.education || [],
-            experience: employeeData.experience || [],
-            certifications: employeeData.certifications || [],
-            emergency: emergencyContactsList,
-            attachments: employeeData.attachments || [],
-            // Assets are tracked live via AssetsContext inside AssetsForm
-            // ("Currently Assigned" section) — this array is only for
-            // staged/pending assignments during the current edit session,
-            // so it should always start empty, not be pre-filled with
-            // already-saved assets.
-            assets: [],
-          }}
-          onClose={() => {
-            setShowEdit(false);
-            fetchData();
-          }}
-          onSaved={() => { setShowEdit(false); fetchData(); }}
-        />
-      )}
+      {showEdit && (() => {
+        // Aadhaar/PAN/Visa scans aren't columns on the employee record —
+        // they're stored as attachment rows (document_type = 'Aadhaar
+        // Card' / 'PAN Card' / 'Visa Document'). Pull the most recent one
+        // of each back out so the edit form shows what was actually
+        // saved instead of appearing empty. We also carry the attachment
+        // id through (as *ScanId) so re-saving updates that row in place
+        // instead of inserting a duplicate every time.
+        const latestAttachmentOfType = (type: string) => {
+          const matches = (employeeData.attachments || [])
+            .filter((a: any) => a.documentType === type)
+            .sort((a: any, b: any) =>
+              new Date(b.createdAt || b.uploadedDate || 0).getTime() -
+              new Date(a.createdAt || a.uploadedDate || 0).getTime()
+            );
+          return matches[0] || null;
+        };
+        const aadhaarAttachment = latestAttachmentOfType('Aadhaar Card');
+        const panAttachment = latestAttachmentOfType('PAN Card');
+        const visaAttachment = latestAttachmentOfType('Visa Document');
+
+        return (
+          <EmployeeProfileForm
+            initialData={{
+              id: employeeData.id,
+              personal: {
+                firstName: employeeData.firstName,
+                lastName: employeeData.lastName,
+                officialEmail: employeeData.email,
+                personalEmail: employeeData.personalEmail,
+                profilePicture: employeeData.profilePicture,
+                phone: employeeData.mobileNumber,
+                dateOfBirth: employeeData.dateOfBirth,
+                gender: employeeData.gender,
+                bloodGroup: employeeData.bloodGroup,
+                maritalStatus: employeeData.maritalStatus,
+                nationality: employeeData.nationality,
+                nationalId: employeeData.nationalId,
+                currentAddress: employeeData.currentAddress || employeeData.address,
+                permanentAddress: employeeData.permanentAddress,
+                aadhaarNumber: employeeData.aadhaarNumber,
+                panNumber: employeeData.panNumber,
+                passportNumber: employeeData.passportNumber,
+                passportIssueDate: employeeData.passportIssueDate,
+                passportExpiryDate: employeeData.passportExpiryDate,
+                passportScan: employeeData.passportScan,
+                visaNumber: employeeData.visaNumber,
+                visaType: employeeData.visaType,
+                visaCountry: employeeData.visaCountry,
+                visaStatus: employeeData.visaStatus,
+                visaIssueDate: employeeData.visaIssueDate,
+                visaExpiryDate: employeeData.visaExpiryDate,
+                aadhaarScan: aadhaarAttachment?.filePath || null,
+                aadhaarScanId: aadhaarAttachment?.id || null,
+                panScan: panAttachment?.filePath || null,
+                panScanId: panAttachment?.id || null,
+                visaDocument: visaAttachment?.filePath || null,
+                visaDocumentId: visaAttachment?.id || null,
+              },
+              job: {
+                employeeId: employeeData.employeeId,
+                designation: employeeData.designation,
+                departmentId: employeeData.departmentId,
+                reportingManagerId: employeeData.reportingManagerId,
+                joiningDate: employeeData.joiningDate,
+                role: employeeData.role,
+                employmentStatus: employeeData.status,
+                employmentType: employeeData.employmentType,
+                workLocation: employeeData.workLocation,
+              },
+              salary: employeeData.salaryDetails || {},
+              education: employeeData.education || [],
+              experience: employeeData.experience || [],
+              certifications: employeeData.certifications || [],
+              emergency: emergencyContactsList,
+              attachments: employeeData.attachments || [],
+              // Assets are tracked live via AssetsContext inside AssetsForm
+              // ("Currently Assigned" section) — this array is only for
+              // staged/pending assignments during the current edit session,
+              // so it should always start empty, not be pre-filled with
+              // already-saved assets.
+              assets: [],
+            }}
+            onClose={() => {
+              setShowEdit(false);
+              fetchData();
+            }}
+            onSaved={() => { setShowEdit(false); fetchData(); }}
+          />
+        );
+      })()}
 
       {showDeactivate && <DeactivateModal employeeName={employeeData.firstName + ' ' + employeeData.lastName} onClose={() => setShowDeactivate(false)} onConfirm={handleDeactivate} />}
       {showAssignAsset && <AssignAssetModal employeeId={employeeData.id} employeeName={employeeData.firstName + ' ' + employeeData.lastName} onClose={() => setShowAssignAsset(false)} onAssigned={fetchData} />}

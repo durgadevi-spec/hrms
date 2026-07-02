@@ -231,23 +231,36 @@ export default function EmployeeProfileForm({ initialData, onClose, onSaved }: E
           }
           await api.put(`/api/employees/${empId}/personal`, personalPayload);
 
-          // Handle explicit Aadhaar/PAN/Visa scan uploads into attachments table
+          // Handle explicit Aadhaar/PAN/Visa scan uploads into attachments table.
+          // Each scan carries its attachment id (set on load, or after the
+          // first save) via the matching *Id key — if present we update that
+          // row in place instead of inserting a new one, so re-saving the
+          // same profile doesn't pile up duplicate attachment rows.
           const extraScans = [
-            { key: 'aadhaarScan', type: 'Aadhaar Card', name: 'Aadhaar Scan' },
-            { key: 'panScan', type: 'PAN Card', name: 'PAN Scan' },
-            { key: 'visaDocument', type: 'Visa Document', name: 'Visa Document' }
+            { key: 'aadhaarScan', idKey: 'aadhaarScanId', type: 'Aadhaar Card', name: 'Aadhaar Scan' },
+            { key: 'panScan', idKey: 'panScanId', type: 'PAN Card', name: 'PAN Scan' },
+            { key: 'visaDocument', idKey: 'visaDocumentId', type: 'Visa Document', name: 'Visa Document' }
           ];
           for (const scan of extraScans) {
             if (formData.personal[scan.key]) {
               try {
-                await api.post(`/api/employees/${empId}/attachments`, {
-                  document_type: scan.type,
-                  document_name: scan.name,
-                  file_name: scan.name,
-                  file_path: formData.personal[scan.key],
-                  file_size: 0,
-                  mime_type: 'image/png'
-                });
+                const existingId = formData.personal[scan.idKey];
+                if (existingId) {
+                  await api.put(`/api/employees/${empId}/attachments/${existingId}`, {
+                    file_path: formData.personal[scan.key],
+                    mime_type: 'image/png'
+                  });
+                } else {
+                  const saved = await api.post(`/api/employees/${empId}/attachments`, {
+                    document_type: scan.type,
+                    document_name: scan.name,
+                    file_name: scan.name,
+                    file_path: formData.personal[scan.key],
+                    file_size: 0,
+                    mime_type: 'image/png'
+                  });
+                  formData.personal[scan.idKey] = saved.id;
+                }
               } catch (e: any) { console.warn(`[Save] Scan upload failed (${scan.name}):`, e.message); }
             }
           }

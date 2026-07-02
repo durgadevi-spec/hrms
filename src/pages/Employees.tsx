@@ -196,6 +196,8 @@ export default function Employees() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-secondary-400" />
             <input
               type="text"
+              name="employee-search"
+              autoComplete="off"
               placeholder="Search by name, ID, email, or designation..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}

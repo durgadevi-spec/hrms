@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Calendar, Check, X, Clock, Sun, Coffee, FileText, AlertCircle, Search, RefreshCw, Clock4, ShieldAlert, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Calendar, Check, X, Clock, Sun, Coffee, FileText, AlertCircle, Search, RefreshCw, Clock4, ShieldAlert, ChevronLeft, ChevronRight, User } from 'lucide-react';
 import { api } from '../lib/api';
 import { formatDate, cn } from '../utils/formatters';
 
@@ -21,7 +21,7 @@ export default function Leaves() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [employeeFilter, setEmployeeFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  
+
   // Calendar State
   const [currentMonth, setCurrentMonth] = useState(new Date());
 
@@ -29,6 +29,7 @@ export default function Leaves() {
   const [history, setHistory] = useState<any[]>([]);
   const [permissions, setPermissions] = useState<any[]>([]);
   const [lmsUsers, setLmsUsers] = useState<any[]>([]);
+  const [employees, setEmployees] = useState<any[]>([]);
   const [isLmsAdmin, setIsLmsAdmin] = useState(false);
   const [syncTime, setSyncTime] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
@@ -45,6 +46,18 @@ export default function Leaves() {
       setLmsUsers(data.lmsUsers || []);
       setIsLmsAdmin(data.isLmsAdmin);
       setSyncTime(data.syncTime);
+
+      // Admins/HR/managers need the employee directory too, so leave and
+      // permission records (which only carry an LMS user_id) can be matched
+      // back to a real employee name via their email.
+      if (data.isLmsAdmin) {
+        try {
+          const emps = await api.get('/api/employees');
+          setEmployees(emps || []);
+        } catch (e) {
+          console.warn('Failed to load employee directory for name lookup:', e);
+        }
+      }
     } catch (e: any) {
       console.error('Failed to fetch LMS data:', e);
       setError(e.message || 'Failed to sync with LMS database');
@@ -55,8 +68,35 @@ export default function Leaves() {
 
   useEffect(() => { fetchLmsData(); }, []);
 
+  // Map LMS user_id -> a real employee display name (matched by email),
+  // falling back to the LMS email, then finally the raw user_id.
+  const employeeNameByUserId = useMemo(() => {
+    const map: Record<string, string> = {};
+    lmsUsers.forEach((u: any) => {
+      if (!u.userId) return;
+      const email = (u.email || '').toLowerCase().trim();
+      const emp = email ? employees.find((e: any) => (e.email || '').toLowerCase().trim() === email) : null;
+      map[u.userId] = emp ? `${emp.firstName} ${emp.lastName}` : (u.email || u.userId);
+    });
+    return map;
+  }, [lmsUsers, employees]);
+
+  const getEmployeeName = (userId: string | undefined) => (userId && employeeNameByUserId[userId]) || userId || 'Unknown';
+
+  // Unique employees present in the leave/permission data, for the
+  // employee-wise filter dropdown.
+  const employeeOptions = useMemo(() => {
+    const ids = new Set<string>([
+      ...history.map((l: any) => l.userId),
+      ...permissions.map((p: any) => p.userId)
+    ].filter(Boolean));
+    return Array.from(ids)
+      .map(id => ({ id, name: getEmployeeName(id) }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [history, permissions, employeeNameByUserId]);
+
   const myBalance = balances[0] || { casualTotal: 0, casualUsed: 0, sickTotal: 0, sickUsed: 0 };
-  
+
   // Filtered Leaves
   const filteredHistory = useMemo(() => {
     let list = history;
@@ -68,14 +108,13 @@ export default function Leaves() {
     }
     if (searchQuery && isLmsAdmin) {
       const q = searchQuery.toLowerCase();
-      list = list.filter(l => 
+      list = list.filter(l =>
         (l.userId || '').toLowerCase().includes(q) ||
-        (l.username || '').toLowerCase().includes(q) ||
-        (l.employeeName || '').toLowerCase().includes(q)
+        getEmployeeName(l.userId).toLowerCase().includes(q)
       );
     }
     return list;
-  }, [history, statusFilter, employeeFilter, searchQuery, isLmsAdmin]);
+  }, [history, statusFilter, employeeFilter, searchQuery, isLmsAdmin, employeeNameByUserId]);
 
   // Filtered Permissions
   const filteredPermissions = useMemo(() => {
@@ -88,13 +127,13 @@ export default function Leaves() {
     }
     if (searchQuery && isLmsAdmin) {
       const q = searchQuery.toLowerCase();
-      list = list.filter(p => 
+      list = list.filter(p =>
         (p.userId || '').toLowerCase().includes(q) ||
-        (p.username || '').toLowerCase().includes(q)
+        getEmployeeName(p.userId).toLowerCase().includes(q)
       );
     }
     return list;
-  }, [permissions, statusFilter, employeeFilter, searchQuery, isLmsAdmin]);
+  }, [permissions, statusFilter, employeeFilter, searchQuery, isLmsAdmin, employeeNameByUserId]);
 
   // Global Computed Stats
   const stats = useMemo(() => {
@@ -120,7 +159,7 @@ export default function Leaves() {
   // Calendar Logic
   const nextMonth = () => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1));
   const prevMonth = () => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1));
-  
+
   const getDaysInMonth = (year: number, month: number) => new Date(year, month + 1, 0).getDate();
   const getFirstDayOfMonth = (year: number, month: number) => new Date(year, month, 1).getDay();
 
@@ -129,11 +168,11 @@ export default function Leaves() {
     const month = currentMonth.getMonth();
     const daysInMonth = getDaysInMonth(year, month);
     const firstDay = getFirstDayOfMonth(year, month);
-    
+
     const days = [];
     for (let i = 0; i < firstDay; i++) days.push(null); // Empty slots
     for (let i = 1; i <= daysInMonth; i++) days.push(new Date(year, month, i));
-    
+
     return days;
   }, [currentMonth]);
 
@@ -165,10 +204,10 @@ export default function Leaves() {
   const getDayEvents = (date: Date | null) => {
     if (!date) return { leaves: [], perms: [] };
     const dateStr = date.toISOString().split('T')[0];
-    
+
     const leaves = history.filter(l => l.startDate && l.startDate.startsWith(dateStr));
     const perms = permissions.filter(p => p.permissionDate && p.permissionDate.startsWith(dateStr));
-    
+
     return { leaves, perms };
   };
 
@@ -185,7 +224,7 @@ export default function Leaves() {
             Read-only mode. Live sync from external LMS database.
             {syncTime && (
               <span className="text-xs bg-surface-200 dark:bg-surface-800 px-2 py-0.5 rounded-full flex items-center gap-1">
-                <RefreshCw className="w-3 h-3 text-primary-500" /> 
+                <RefreshCw className="w-3 h-3 text-primary-500" />
                 Last sync: {new Date(syncTime).toLocaleTimeString()}
               </span>
             )}
@@ -194,7 +233,7 @@ export default function Leaves() {
       </div>
 
       {/* Primary KPI Cards (Balances for Employee, Overall Totals for Admin) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {!isLmsAdmin ? (
           <>
             <LeaveBalanceCard type="Total Casual Leave" balance={myBalance.casualTotal} icon={Sun} color="primary" />
@@ -204,55 +243,55 @@ export default function Leaves() {
           </>
         ) : (
           <>
-            <div className="card p-5 border-l-4 border-l-primary-500">
-              <p className="text-sm text-secondary-600 dark:text-surface-400 mb-1">Total LMS Leaves</p>
-              <p className="text-3xl font-bold text-secondary-900 dark:text-white">{history.length}</p>
+            <div className="card p-3 border-l-4 border-l-primary-500">
+              <p className="text-xs text-secondary-600 dark:text-surface-400 mb-0.5">Total LMS Leaves</p>
+              <p className="text-xl font-bold text-secondary-900 dark:text-white">{history.length}</p>
             </div>
-            <div className="card p-5 border-l-4 border-l-warning-500">
-              <p className="text-sm text-secondary-600 dark:text-surface-400 mb-1">Pending Leaves</p>
-              <p className="text-3xl font-bold text-warning-600">{stats.pendingLeaves}</p>
+            <div className="card p-3 border-l-4 border-l-warning-500">
+              <p className="text-xs text-secondary-600 dark:text-surface-400 mb-0.5">Pending Leaves</p>
+              <p className="text-xl font-bold text-warning-600">{stats.pendingLeaves}</p>
             </div>
-            <div className="card p-5 border-l-4 border-l-success-500">
-              <p className="text-sm text-secondary-600 dark:text-surface-400 mb-1">Approved Leaves</p>
-              <p className="text-3xl font-bold text-success-600">{stats.approvedLeaves}</p>
+            <div className="card p-3 border-l-4 border-l-success-500">
+              <p className="text-xs text-secondary-600 dark:text-surface-400 mb-0.5">Approved Leaves</p>
+              <p className="text-xl font-bold text-success-600">{stats.approvedLeaves}</p>
             </div>
-            <div className="card p-5 border-l-4 border-l-error-500">
-              <p className="text-sm text-secondary-600 dark:text-surface-400 mb-1">Rejected Leaves</p>
-              <p className="text-3xl font-bold text-error-600">{stats.rejectedLeaves}</p>
+            <div className="card p-3 border-l-4 border-l-error-500">
+              <p className="text-xs text-secondary-600 dark:text-surface-400 mb-0.5">Rejected Leaves</p>
+              <p className="text-xl font-bold text-error-600">{stats.rejectedLeaves}</p>
             </div>
           </>
         )}
       </div>
 
       {/* Secondary KPI Cards (Counts & Permissions for both Employee and Admin) */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="card p-4 flex justify-between items-center bg-surface-50 dark:bg-surface-800/50">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="card p-3 flex justify-between items-center bg-surface-50 dark:bg-surface-800/50">
           <div>
-            <p className="text-sm text-secondary-600 dark:text-surface-400">Total Approved Permissions</p>
-            <p className="text-2xl font-bold text-secondary-900 dark:text-white mt-1">{stats.totalApprovedPermissions}</p>
+            <p className="text-xs text-secondary-600 dark:text-surface-400">Total Approved Permissions</p>
+            <p className="text-lg font-bold text-secondary-900 dark:text-white mt-0.5">{stats.totalApprovedPermissions}</p>
           </div>
-          <div className="w-10 h-10 rounded-full bg-success-100 text-success-600 flex items-center justify-center">
-            <Check className="w-5 h-5" />
+          <div className="w-8 h-8 rounded-full bg-success-100 text-success-600 flex items-center justify-center shrink-0">
+            <Check className="w-4 h-4" />
           </div>
         </div>
 
-        <div className="card p-4 flex justify-between items-center bg-surface-50 dark:bg-surface-800/50">
+        <div className="card p-3 flex justify-between items-center bg-surface-50 dark:bg-surface-800/50">
           <div>
-            <p className="text-sm text-secondary-600 dark:text-surface-400">Approved Permission Hours</p>
-            <p className="text-2xl font-bold text-secondary-900 dark:text-white mt-1">{stats.totalApprovedPermissionHours.toFixed(2)} <span className="text-sm font-normal text-secondary-500">hrs</span></p>
+            <p className="text-xs text-secondary-600 dark:text-surface-400">Approved Permission Hours</p>
+            <p className="text-lg font-bold text-secondary-900 dark:text-white mt-0.5">{stats.totalApprovedPermissionHours.toFixed(2)} <span className="text-xs font-normal text-secondary-500">hrs</span></p>
           </div>
-          <div className="w-10 h-10 rounded-full bg-primary-100 text-primary-600 flex items-center justify-center">
-            <Clock4 className="w-5 h-5" />
+          <div className="w-8 h-8 rounded-full bg-primary-100 text-primary-600 flex items-center justify-center shrink-0">
+            <Clock4 className="w-4 h-4" />
           </div>
         </div>
 
-        <div className="card p-4 flex justify-between items-center bg-surface-50 dark:bg-surface-800/50">
+        <div className="card p-3 flex justify-between items-center bg-surface-50 dark:bg-surface-800/50">
           <div>
-            <p className="text-sm text-secondary-600 dark:text-surface-400">Permissions &gt; 3 Hours</p>
-            <p className="text-2xl font-bold text-error-600 mt-1">{stats.permissionsExceeding3Hrs}</p>
+            <p className="text-xs text-secondary-600 dark:text-surface-400">Permissions &gt; 3 Hours</p>
+            <p className="text-lg font-bold text-error-600 mt-0.5">{stats.permissionsExceeding3Hrs}</p>
           </div>
-          <div className="w-10 h-10 rounded-full bg-error-100 text-error-600 flex items-center justify-center">
-            <ShieldAlert className="w-5 h-5" />
+          <div className="w-8 h-8 rounded-full bg-error-100 text-error-600 flex items-center justify-center shrink-0">
+            <ShieldAlert className="w-4 h-4" />
           </div>
         </div>
       </div>
@@ -312,7 +351,7 @@ export default function Leaves() {
         </div>
       ) : (
         <div className="space-y-4">
-          
+
           {/* LEAVES TAB */}
           {activeTab === 'leaves' && (
             <>
@@ -336,9 +375,21 @@ export default function Leaves() {
                   ))}
                 </div>
                 {isLmsAdmin && (
-                  <div className="relative w-full sm:w-72">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-secondary-400" />
-                    <input type="text" placeholder="Search Emp ID, Name..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="input-field pl-9 text-sm w-full" />
+                  <div className="flex items-center gap-2 w-full sm:w-auto">
+                    <select
+                      value={employeeFilter}
+                      onChange={e => setEmployeeFilter(e.target.value)}
+                      className="input-field text-sm w-full sm:w-52"
+                    >
+                      <option value="all">All Employees</option>
+                      {employeeOptions.map(o => (
+                        <option key={o.id} value={o.id}>{o.name}</option>
+                      ))}
+                    </select>
+                    <div className="relative w-full sm:w-72">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-secondary-400" />
+                      <input type="text" placeholder="Search Emp ID, Name..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="input-field pl-9 text-sm w-full" />
+                    </div>
                   </div>
                 )}
               </div>
@@ -354,8 +405,8 @@ export default function Leaves() {
                   const StatusIcon = statusConf.icon;
                   const lType = (leave.leaveType || '').toLowerCase();
                   const typeColor = lType.includes('sick') ? 'bg-error-100 text-error-700' :
-                                    lType.includes('casual') ? 'bg-primary-100 text-primary-700' :
-                                    lType.includes('loss') ? 'bg-warning-100 text-warning-700' : 'bg-secondary-100 text-secondary-700';
+                    lType.includes('casual') ? 'bg-primary-100 text-primary-700' :
+                      lType.includes('loss') ? 'bg-warning-100 text-warning-700' : 'bg-secondary-100 text-secondary-700';
                   const TypeIcon = lType.includes('sick') ? Coffee : lType.includes('casual') ? Sun : lType.includes('loss') ? FileText : Calendar;
 
                   return (
@@ -375,8 +426,13 @@ export default function Leaves() {
                                 {leave.status || 'Pending'}
                               </span>
                             </div>
+                            {isLmsAdmin && (
+                              <p className="text-sm font-semibold text-primary-700 dark:text-primary-400 mb-1 flex items-center gap-1.5">
+                                <User className="w-3.5 h-3.5" /> {getEmployeeName(leave.userId)}
+                              </p>
+                            )}
                             <p className="text-sm text-secondary-600 dark:text-surface-400 font-medium mb-2">
-                              {leave.startDate ? formatDate(leave.startDate) : 'N/A'} 
+                              {leave.startDate ? formatDate(leave.startDate) : 'N/A'}
                               {leave.endDate && leave.startDate !== leave.endDate && ` — ${formatDate(leave.endDate)}`}
                             </p>
                             {leave.reason && (
@@ -415,9 +471,21 @@ export default function Leaves() {
                   ))}
                 </div>
                 {isLmsAdmin && (
-                  <div className="relative w-full sm:w-72">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-secondary-400" />
-                    <input type="text" placeholder="Search Emp ID, Name..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="input-field pl-9 text-sm w-full" />
+                  <div className="flex items-center gap-2 w-full sm:w-auto">
+                    <select
+                      value={employeeFilter}
+                      onChange={e => setEmployeeFilter(e.target.value)}
+                      className="input-field text-sm w-full sm:w-52"
+                    >
+                      <option value="all">All Employees</option>
+                      {employeeOptions.map(o => (
+                        <option key={o.id} value={o.id}>{o.name}</option>
+                      ))}
+                    </select>
+                    <div className="relative w-full sm:w-72">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-secondary-400" />
+                      <input type="text" placeholder="Search Emp ID, Name..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="input-field pl-9 text-sm w-full" />
+                    </div>
                   </div>
                 )}
               </div>
@@ -454,9 +522,14 @@ export default function Leaves() {
                                 <span className="badge bg-error-500 text-white border-transparent">
                                   <ShieldAlert className="w-3 h-3 mr-1" />
                                   Exceeds 3 Hours
-                               </span>
+                                </span>
                               )}
                             </div>
+                            {isLmsAdmin && (
+                              <p className="text-sm font-semibold text-primary-700 dark:text-primary-400 mb-1 flex items-center gap-1.5">
+                                <User className="w-3.5 h-3.5" /> {getEmployeeName(perm.userId)}
+                              </p>
+                            )}
                             <p className="text-sm text-secondary-600 dark:text-surface-400 font-medium mb-2 flex items-center gap-2">
                               <Calendar className="w-4 h-4" />
                               {perm.permissionDate ? formatDate(perm.permissionDate) : 'N/A'}
@@ -484,7 +557,7 @@ export default function Leaves() {
           {/* CALENDAR TAB */}
           {activeTab === 'calendar' && (
             <div className="space-y-6">
-              
+
               {/* Monthly Stats */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="card p-4 bg-surface-50 dark:bg-surface-800/50 border-l-4 border-l-primary-500">
@@ -523,10 +596,10 @@ export default function Leaves() {
                       {day}
                     </div>
                   ))}
-                  
+
                   {calendarDays.map((date, i) => {
                     if (!date) return <div key={`empty-${i}`} className="bg-white dark:bg-surface-900 p-2 min-h-[100px]" />;
-                    
+
                     const { leaves, perms } = getDayEvents(date);
                     const isToday = date.toDateString() === new Date().toDateString();
 
@@ -537,15 +610,15 @@ export default function Leaves() {
                             {date.getDate()}
                           </span>
                         </div>
-                        
+
                         <div className="space-y-1">
                           {leaves.map((l, idx) => (
-                            <div key={`l-${idx}`} title={l.leaveType} className="text-[10px] px-1.5 py-0.5 rounded bg-primary-100 text-primary-700 truncate cursor-help">
+                            <div key={`l-${idx}`} title={isLmsAdmin ? `${getEmployeeName(l.userId)} — ${l.leaveType}` : l.leaveType} className="text-[10px] px-1.5 py-0.5 rounded bg-primary-100 text-primary-700 truncate cursor-help">
                               {l.leaveType} {(l.status || '').toLowerCase() === 'approved' ? '✓' : ''}
                             </div>
                           ))}
                           {perms.map((p, idx) => (
-                            <div key={`p-${idx}`} title={`${p.permissionType} (${p.totalHours}h)`} className="text-[10px] px-1.5 py-0.5 rounded bg-success-100 text-success-700 truncate cursor-help">
+                            <div key={`p-${idx}`} title={isLmsAdmin ? `${getEmployeeName(p.userId)} — ${p.permissionType} (${p.totalHours}h)` : `${p.permissionType} (${p.totalHours}h)`} className="text-[10px] px-1.5 py-0.5 rounded bg-success-100 text-success-700 truncate cursor-help">
                               {p.totalHours}h {(p.status || '').toLowerCase() === 'approved' ? '✓' : ''}
                             </div>
                           ))}
@@ -554,7 +627,7 @@ export default function Leaves() {
                     );
                   })}
                 </div>
-                
+
                 <div className="flex items-center gap-4 mt-4 text-xs text-secondary-500 justify-end">
                   <div className="flex items-center gap-1"><div className="w-3 h-3 rounded bg-primary-100"></div> Leave</div>
                   <div className="flex items-center gap-1"><div className="w-3 h-3 rounded bg-success-100"></div> Permission</div>
@@ -573,18 +646,18 @@ export default function Leaves() {
 
 function LeaveBalanceCard({ type, balance, icon: Icon, color }: { type: string; balance: number; icon: React.ElementType; color: string }) {
   return (
-    <div className="card p-5">
-      <div className="flex items-center gap-3">
-        <div className={cn('w-12 h-12 rounded-xl flex items-center justify-center shrink-0',
+    <div className="card p-3">
+      <div className="flex items-center gap-2.5">
+        <div className={cn('w-9 h-9 rounded-lg flex items-center justify-center shrink-0',
           color === 'primary' ? 'bg-primary-100 text-primary-600' : '',
           color === 'error' ? 'bg-error-100 text-error-600' : ''
         )}>
-          <Icon className="w-6 h-6" />
+          <Icon className="w-4.5 h-4.5" />
         </div>
         <div>
-          <p className="text-sm font-medium text-secondary-600 dark:text-surface-400 mb-0.5">{type}</p>
-          <p className="text-2xl font-bold text-secondary-900 dark:text-white">
-            {balance} <span className="text-sm font-normal text-secondary-500">days</span>
+          <p className="text-xs font-medium text-secondary-600 dark:text-surface-400 mb-0.5">{type}</p>
+          <p className="text-lg font-bold text-secondary-900 dark:text-white">
+            {balance} <span className="text-xs font-normal text-secondary-500">days</span>
           </p>
         </div>
       </div>

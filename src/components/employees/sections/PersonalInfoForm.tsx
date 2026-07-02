@@ -54,16 +54,16 @@ export default function PersonalInfoForm({ data, errors, onChange }: Props) {
         <div>
           <h4 className="text-sm font-bold text-secondary-900 dark:text-white mb-1">Profile Picture</h4>
           <p className="text-xs text-secondary-500 mb-3">Upload a square image, max 2MB.</p>
-          <input 
-            type="file" 
-            accept="image/*" 
-            className="hidden" 
-            ref={fileInputRef} 
-            onChange={(e) => handleImageUpload(e, 'profilePicture')} 
+          <input
+            type="file"
+            accept="image/*"
+            className="hidden"
+            ref={fileInputRef}
+            onChange={(e) => handleImageUpload(e, 'profilePicture')}
           />
-          <button 
+          <button
             type="button"
-            onClick={() => fileInputRef.current?.click()} 
+            onClick={() => fileInputRef.current?.click()}
             className="btn-secondary py-1.5 px-3 text-xs flex items-center gap-2">
             <Upload className="w-3.5 h-3.5" /> Upload Photo
           </button>
@@ -86,7 +86,7 @@ export default function PersonalInfoForm({ data, errors, onChange }: Props) {
       <div className="grid grid-cols-2 gap-4">
         <div>
           <label className="block text-sm font-medium text-secondary-700 dark:text-surface-300 mb-1.5">Official Email <span className="text-error-500">*</span></label>
-          <input type="email" name="officialEmail" value={data.officialEmail || ''} onChange={handleChange} className={inputCls('officialEmail')} placeholder="john.doe@company.com" />
+          <input type="email" name="officialEmail" autoComplete="off" value={data.officialEmail || ''} onChange={handleChange} className={inputCls('officialEmail')} placeholder="john.doe@company.com" />
           {errors?.officialEmail && <p className="text-xs text-error-600 mt-1">{errors.officialEmail}</p>}
         </div>
         <div>
@@ -171,7 +171,7 @@ export default function PersonalInfoForm({ data, errors, onChange }: Props) {
                 {data.aadhaarScan ? (
                   <div className="relative w-32 h-24 rounded-lg overflow-hidden border border-surface-200 dark:border-surface-700">
                     <img src={data.aadhaarScan} alt="Aadhaar Scan" className="w-full h-full object-cover" />
-                    <button 
+                    <button
                       type="button"
                       onClick={() => onChange({ ...data, aadhaarScan: null })}
                       className="absolute top-1 right-1 bg-black/50 text-white p-1 rounded-full hover:bg-black/70">
@@ -179,24 +179,24 @@ export default function PersonalInfoForm({ data, errors, onChange }: Props) {
                     </button>
                   </div>
                 ) : (
-                  <div 
+                  <div
                     onClick={() => aadhaarInputRef.current?.click()}
                     className="w-32 h-24 rounded-lg border-2 border-dashed border-surface-300 dark:border-surface-700 hover:border-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20 flex flex-col items-center justify-center cursor-pointer transition-colors">
                     <Upload className="w-5 h-5 text-secondary-400 mb-1" />
                     <span className="text-xs text-secondary-500 font-medium">Upload Scan</span>
                   </div>
                 )}
-                <input 
-                  type="file" 
-                  accept="image/*,application/pdf" 
-                  className="hidden" 
-                  ref={aadhaarInputRef} 
-                  onChange={(e) => handleImageUpload(e, 'aadhaarScan')} 
+                <input
+                  type="file"
+                  accept="image/*,application/pdf"
+                  className="hidden"
+                  ref={aadhaarInputRef}
+                  onChange={(e) => handleImageUpload(e, 'aadhaarScan')}
                 />
               </div>
             </div>
           </div>
-          
+
           {/* PAN Details */}
           <div>
             <label className="block text-sm font-medium text-secondary-700 dark:text-surface-300 mb-1.5">PAN Number</label>
@@ -207,7 +207,7 @@ export default function PersonalInfoForm({ data, errors, onChange }: Props) {
                 {data.panScan ? (
                   <div className="relative w-32 h-24 rounded-lg overflow-hidden border border-surface-200 dark:border-surface-700">
                     <img src={data.panScan} alt="PAN Scan" className="w-full h-full object-cover" />
-                    <button 
+                    <button
                       type="button"
                       onClick={() => onChange({ ...data, panScan: null })}
                       className="absolute top-1 right-1 bg-black/50 text-white p-1 rounded-full hover:bg-black/70">
@@ -215,19 +215,19 @@ export default function PersonalInfoForm({ data, errors, onChange }: Props) {
                     </button>
                   </div>
                 ) : (
-                  <div 
+                  <div
                     onClick={() => panInputRef.current?.click()}
                     className="w-32 h-24 rounded-lg border-2 border-dashed border-surface-300 dark:border-surface-700 hover:border-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20 flex flex-col items-center justify-center cursor-pointer transition-colors">
                     <Upload className="w-5 h-5 text-secondary-400 mb-1" />
                     <span className="text-xs text-secondary-500 font-medium">Upload Scan</span>
                   </div>
                 )}
-                <input 
-                  type="file" 
-                  accept="image/*,application/pdf" 
-                  className="hidden" 
-                  ref={panInputRef} 
-                  onChange={(e) => handleImageUpload(e, 'panScan')} 
+                <input
+                  type="file"
+                  accept="image/*,application/pdf"
+                  className="hidden"
+                  ref={panInputRef}
+                  onChange={(e) => handleImageUpload(e, 'panScan')}
                 />
               </div>
             </div>
@@ -257,14 +257,14 @@ export default function PersonalInfoForm({ data, errors, onChange }: Props) {
                   <input type="date" name="passportExpiryDate" value={data.passportExpiryDate || ''} onChange={handleChange} className={inputCls('passportExpiryDate')} />
                 </div>
               </div>
-              
+
               <div className="mt-4">
                 <label className="block text-sm font-medium text-secondary-700 dark:text-surface-300 mb-2">Passport Scan</label>
                 <div className="flex items-center gap-4">
                   {data.passportScan ? (
                     <div className="relative w-32 h-24 rounded-lg overflow-hidden border border-surface-200 dark:border-surface-700">
                       <img src={data.passportScan} alt="Passport Scan" className="w-full h-full object-cover" />
-                      <button 
+                      <button
                         type="button"
                         onClick={() => onChange({ ...data, passportScan: null })}
                         className="absolute top-1 right-1 bg-black/50 text-white p-1 rounded-full hover:bg-black/70">
@@ -272,25 +272,25 @@ export default function PersonalInfoForm({ data, errors, onChange }: Props) {
                       </button>
                     </div>
                   ) : (
-                    <div 
+                    <div
                       onClick={() => passportInputRef.current?.click()}
                       className="w-32 h-24 rounded-lg border-2 border-dashed border-surface-300 dark:border-surface-700 hover:border-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20 flex flex-col items-center justify-center cursor-pointer transition-colors">
                       <Upload className="w-5 h-5 text-secondary-400 mb-1" />
                       <span className="text-xs text-secondary-500 font-medium">Upload Scan</span>
                     </div>
                   )}
-                  <input 
-                    type="file" 
-                    accept="image/*,application/pdf" 
-                    className="hidden" 
-                    ref={passportInputRef} 
-                    onChange={(e) => handleImageUpload(e, 'passportScan')} 
+                  <input
+                    type="file"
+                    accept="image/*,application/pdf"
+                    className="hidden"
+                    ref={passportInputRef}
+                    onChange={(e) => handleImageUpload(e, 'passportScan')}
                   />
                 </div>
               </div>
             </div>
           </div>
-          
+
           {/* Visa */}
           <div>
             <h5 className="text-sm font-semibold text-secondary-800 dark:text-surface-200 mb-3">Visa Information</h5>
@@ -330,14 +330,14 @@ export default function PersonalInfoForm({ data, errors, onChange }: Props) {
                   <input type="date" name="visaExpiryDate" value={data.visaExpiryDate || ''} onChange={handleChange} className={inputCls('visaExpiryDate')} />
                 </div>
               </div>
-              
+
               <div className="mt-4">
                 <label className="block text-sm font-medium text-secondary-700 dark:text-surface-300 mb-2">Visa Document</label>
                 <div className="flex items-center gap-4">
                   {data.visaDocument ? (
                     <div className="relative w-32 h-24 rounded-lg overflow-hidden border border-surface-200 dark:border-surface-700">
                       <img src={data.visaDocument} alt="Visa Document" className="w-full h-full object-cover" />
-                      <button 
+                      <button
                         type="button"
                         onClick={() => onChange({ ...data, visaDocument: null })}
                         className="absolute top-1 right-1 bg-black/50 text-white p-1 rounded-full hover:bg-black/70">
@@ -345,19 +345,19 @@ export default function PersonalInfoForm({ data, errors, onChange }: Props) {
                       </button>
                     </div>
                   ) : (
-                    <div 
+                    <div
                       onClick={() => visaInputRef.current?.click()}
                       className="w-32 h-24 rounded-lg border-2 border-dashed border-surface-300 dark:border-surface-700 hover:border-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20 flex flex-col items-center justify-center cursor-pointer transition-colors">
                       <Upload className="w-5 h-5 text-secondary-400 mb-1" />
                       <span className="text-xs text-secondary-500 font-medium">Upload Scan</span>
                     </div>
                   )}
-                  <input 
-                    type="file" 
-                    accept="image/*,application/pdf" 
-                    className="hidden" 
-                    ref={visaInputRef} 
-                    onChange={(e) => handleImageUpload(e, 'visaDocument')} 
+                  <input
+                    type="file"
+                    accept="image/*,application/pdf"
+                    className="hidden"
+                    ref={visaInputRef}
+                    onChange={(e) => handleImageUpload(e, 'visaDocument')}
                   />
                 </div>
               </div>
@@ -369,19 +369,19 @@ export default function PersonalInfoForm({ data, errors, onChange }: Props) {
       {/* Disability Details */}
       <div className="pt-4 border-t border-surface-200 dark:border-surface-800">
         <div className="flex items-center gap-3 mb-4">
-          <input 
-            type="checkbox" 
+          <input
+            type="checkbox"
             id="isPersonWithDisability"
-            name="isPersonWithDisability" 
-            checked={data.isPersonWithDisability || false} 
-            onChange={handleChange} 
-            className="w-4 h-4 text-primary-600 rounded border-surface-300 focus:ring-primary-500" 
+            name="isPersonWithDisability"
+            checked={data.isPersonWithDisability || false}
+            onChange={handleChange}
+            className="w-4 h-4 text-primary-600 rounded border-surface-300 focus:ring-primary-500"
           />
           <label htmlFor="isPersonWithDisability" className="text-sm font-medium text-secondary-900 dark:text-white">
             Is Person with Disability?
           </label>
         </div>
-        
+
         {data.isPersonWithDisability && (
           <div className="grid grid-cols-2 gap-4 animate-fade-in pl-7">
             <div>
