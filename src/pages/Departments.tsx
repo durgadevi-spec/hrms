@@ -105,12 +105,56 @@ function DepartmentModal({ onClose, dept, isEdit }: { onClose: () => void; dept?
   );
 }
 
+function DepartmentMembersModal({ dept, employees, onClose }: { dept: any; employees: any[]; onClose: () => void }) {
+  const members = employees.filter(employee => employee.departmentId === dept.id);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-lg bg-white dark:bg-surface-900 rounded-2xl shadow-2xl animate-scale-in flex flex-col max-h-[90vh]">
+        <div className="flex items-center gap-3 px-6 py-5 border-b border-surface-200 dark:border-surface-800">
+          <div className="w-10 h-10 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center">
+            <Users className="w-5 h-5 text-primary-600 dark:text-primary-400" />
+          </div>
+          <div>
+            <h2 className="text-lg font-bold text-secondary-900 dark:text-white">{dept.name} Members</h2>
+            <p className="text-sm text-secondary-500">{members.length} member{members.length !== 1 ? 's' : ''}</p>
+          </div>
+          <button onClick={onClose} className="ml-auto p-2 rounded-lg hover:bg-surface-100 dark:hover:bg-surface-800 text-secondary-400" title="Close">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="p-6 overflow-y-auto">
+          {members.length > 0 ? (
+            <div className="space-y-2">
+              {members.map(member => (
+                <div key={member.id} className="flex items-center gap-3 p-3 rounded-lg bg-surface-50 dark:bg-surface-800/50">
+                  <div className="w-10 h-10 rounded-full bg-primary-100 dark:bg-primary-900/40 flex items-center justify-center text-sm font-bold text-primary-700 dark:text-primary-300">
+                    {(member.firstName || '?').charAt(0)}{(member.lastName || '').charAt(0)}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-secondary-900 dark:text-white truncate">{member.firstName} {member.lastName}</p>
+                    <p className="text-xs text-secondary-500 truncate">{member.designation || member.email || 'Employee'}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="py-8 text-center text-sm text-secondary-400">No members assigned to this department.</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Departments() {
   const { departments, deleteDepartment } = useDepartments();
   const { isAdmin } = useAuth();
   const [search, setSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingDept, setEditingDept] = useState<any>(null);
+  const [selectedDept, setSelectedDept] = useState<any>(null);
   const [employees, setEmployees] = useState<any[]>([]);
   const [view, setView] = useState<'grid' | 'list'>('list');
 
@@ -136,7 +180,10 @@ export default function Departments() {
     employees.filter(e => dept.managerIds?.includes(e.id));
 
   const getMemberCount = (dept: any) =>
-    employees.filter(e => e.job?.departmentId === dept.id).length;
+    employees.filter(e => e.departmentId === dept.id).length;
+
+  const getDepartmentMembers = (dept: any) =>
+    employees.filter(e => e.departmentId === dept.id);
 
   return (
     <div className="animate-fade-in space-y-6">
@@ -207,7 +254,7 @@ export default function Departments() {
             const managers = getManagers(dept);
             const memberCount = getMemberCount(dept);
             return (
-              <div key={dept.id} className="card p-6 group hover:-translate-y-1 transition-all duration-300 relative">
+              <div key={dept.id} onClick={() => setSelectedDept(dept)} className="card p-6 group hover:-translate-y-1 transition-all duration-300 relative cursor-pointer">
                 <div className="flex items-start justify-between mb-4">
                   <div className="w-12 h-12 rounded-xl bg-primary-100 dark:bg-primary-900/40 text-primary-600 dark:text-primary-400 flex items-center justify-center flex-shrink-0">
                     <Building2 className="w-6 h-6" />
@@ -219,10 +266,10 @@ export default function Departments() {
                     </div>
                     {isAdmin && (
                       <>
-                        <button onClick={() => handleEdit(dept)} className="p-2 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-lg transition-colors text-primary-600" title="Edit">
+                        <button onClick={event => { event.stopPropagation(); handleEdit(dept); }} className="p-2 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-lg transition-colors text-primary-600" title="Edit">
                           <Edit2 className="w-4 h-4" />
                         </button>
-                        <button onClick={() => handleDelete(dept.id)} className="p-2 hover:bg-error-50 dark:hover:bg-error-900/20 rounded-lg transition-colors text-error-600" title="Delete">
+                        <button onClick={event => { event.stopPropagation(); handleDelete(dept.id); }} className="p-2 hover:bg-error-50 dark:hover:bg-error-900/20 rounded-lg transition-colors text-error-600" title="Delete">
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </>
@@ -277,7 +324,7 @@ export default function Departments() {
                   const managers = getManagers(dept);
                   const memberCount = getMemberCount(dept);
                   return (
-                    <tr key={dept.id} className="hover:bg-surface-50 dark:hover:bg-surface-800/50 transition-colors">
+                    <tr key={dept.id} onClick={() => setSelectedDept(dept)} className="hover:bg-surface-50 dark:hover:bg-surface-800/50 transition-colors cursor-pointer">
                       <td className="px-5 py-4">
                         <div className="flex items-center gap-3">
                           <div className="w-9 h-9 rounded-lg bg-primary-100 dark:bg-primary-900/40 text-primary-600 dark:text-primary-400 flex items-center justify-center flex-shrink-0">
@@ -316,10 +363,10 @@ export default function Departments() {
                       {isAdmin && (
                         <td className="px-5 py-4 text-right">
                           <div className="flex items-center justify-end gap-2">
-                            <button onClick={() => handleEdit(dept)} className="p-2 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-lg transition-colors text-primary-600" title="Edit">
+                            <button onClick={event => { event.stopPropagation(); handleEdit(dept); }} className="p-2 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-lg transition-colors text-primary-600" title="Edit">
                               <Edit2 className="w-4 h-4" />
                             </button>
-                            <button onClick={() => handleDelete(dept.id)} className="p-2 hover:bg-error-50 dark:hover:bg-error-900/20 rounded-lg transition-colors text-error-600" title="Delete">
+                            <button onClick={event => { event.stopPropagation(); handleDelete(dept.id); }} className="p-2 hover:bg-error-50 dark:hover:bg-error-900/20 rounded-lg transition-colors text-error-600" title="Delete">
                               <Trash2 className="w-4 h-4" />
                             </button>
                           </div>
@@ -339,6 +386,13 @@ export default function Departments() {
           dept={editingDept}
           isEdit={!!editingDept}
           onClose={() => { setShowModal(false); setEditingDept(null); }}
+        />
+      )}
+      {selectedDept && (
+        <DepartmentMembersModal
+          dept={selectedDept}
+          employees={getDepartmentMembers(selectedDept)}
+          onClose={() => setSelectedDept(null)}
         />
       )}
     </div>
