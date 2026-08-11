@@ -110,6 +110,7 @@ export default function JobDetailsForm({ data, errors, onChange }: Props) {
             <option value="manager">Manager</option>
             <option value="hr">HR</option>
             <option value="admin">Admin</option>
+            <option value="it_support">IT Support</option>
           </select>
           <p className="text-xs text-secondary-500 mt-1">Determines what the user can see in the system.</p>
         </div>

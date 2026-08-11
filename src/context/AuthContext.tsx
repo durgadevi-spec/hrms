@@ -12,6 +12,7 @@ interface AuthContextType {
   isAdmin: boolean;
   isManager: boolean;
   isHR: boolean;
+  isITSupport: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -93,6 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isAdmin: user?.role === 'admin' || user?.role === 'hr',
     isManager: user?.role === 'manager' || user?.role === 'admin' || user?.role === 'hr',
     isHR: user?.role === 'hr' || user?.role === 'admin',
+    isITSupport: user?.role === 'it_support',
   }), [user, isLoading, login, signup, logout]);
 
   return (

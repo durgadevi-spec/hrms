@@ -30,8 +30,16 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+// Blocks IT Support accounts from every route except Assets, Profile, and Settings.
+// Everyone else passes through unchanged.
+function ModuleGate({ children }: { children: React.ReactNode }) {
+  const { isITSupport } = useAuth();
+  if (isITSupport) return <Navigate to="/assets" replace />;
+  return <>{children}</>;
+}
+
 function AppRoutes() {
-  const { isAuthenticated, isLoading, isAdmin, user } = useAuth();
+  const { isAuthenticated, isLoading, isAdmin, isITSupport, user } = useAuth();
 
   if (isLoading) {
     return (
@@ -41,7 +49,7 @@ function AppRoutes() {
     );
   }
 
-  const homePath = isAdmin ? '/admin' : `/profile/${user?.id}`;
+  const homePath = isITSupport ? '/assets' : isAdmin ? '/admin' : `/profile/${user?.id}`;
 
   return (
     <Routes>
@@ -52,13 +60,13 @@ function AppRoutes() {
           <Layout />
         </ProtectedRoute>
       }>
-        <Route path="/admin" element={<AdminDashboard />} />
-        <Route path="/employees" element={<Employees />} />
-        <Route path="/departments" element={<Departments />} />
-        <Route path="/managers" element={<Managers />} />
-        <Route path="/projects" element={<Projects />} />
-        <Route path="/timesheets" element={<Timesheets />} />
-        <Route path="/leaves" element={<Leaves />} />
+        <Route path="/admin" element={<ModuleGate><AdminDashboard /></ModuleGate>} />
+        <Route path="/employees" element={<ModuleGate><Employees /></ModuleGate>} />
+        <Route path="/departments" element={<ModuleGate><Departments /></ModuleGate>} />
+        <Route path="/managers" element={<ModuleGate><Managers /></ModuleGate>} />
+        <Route path="/projects" element={<ModuleGate><Projects /></ModuleGate>} />
+        <Route path="/timesheets" element={<ModuleGate><Timesheets /></ModuleGate>} />
+        <Route path="/leaves" element={<ModuleGate><Leaves /></ModuleGate>} />
         <Route path="/assets" element={<Assets />} />
         <Route path="/profile/:id" element={<Profile />} />
         <Route path="/settings" element={<Settings />} />

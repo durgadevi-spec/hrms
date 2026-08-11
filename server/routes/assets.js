@@ -17,7 +17,7 @@ router.get('/', async (req, res) => {
 });
 
 // POST /api/assets  (admin/hr)
-router.post('/', requireRole('admin', 'hr'), async (req, res) => {
+router.post('/', requireRole('admin', 'hr', 'it_support'), async (req, res) => {
   const { name, assetType, serialNumber, description, status, purchaseDate, location } = req.body;
   if (!name || !assetType) return res.status(400).json({ error: 'Name and asset type are required' });
 
@@ -41,7 +41,7 @@ router.post('/', requireRole('admin', 'hr'), async (req, res) => {
 });
 
 // PUT /api/assets/:id
-router.put('/:id', requireRole('admin', 'hr'), async (req, res) => {
+router.put('/:id', requireRole('admin', 'hr', 'it_support'), async (req, res) => {
   const { name, assetType, serialNumber, description, status, purchaseDate, location } = req.body;
   const updateData = { updated_at: new Date().toISOString() };
   if (name !== undefined) updateData.name = name.trim();
@@ -58,7 +58,7 @@ router.put('/:id', requireRole('admin', 'hr'), async (req, res) => {
 });
 
 // DELETE /api/assets/:id
-router.delete('/:id', requireRole('admin', 'hr'), async (req, res) => {
+router.delete('/:id', requireRole('admin', 'hr', 'it_support'), async (req, res) => {
   const { error } = await supabase.from('assets').delete().eq('id', req.params.id);
   if (error) return res.status(500).json({ error: error.message });
   return res.json({ message: 'Asset deleted' });
@@ -89,7 +89,7 @@ router.get('/assignments/employee/:employeeId', async (req, res) => {
 });
 
 // POST /api/assets/assign  (admin/hr)
-router.post('/assign', requireRole('admin', 'hr'), async (req, res) => {
+router.post('/assign', requireRole('admin', 'hr', 'it_support'), async (req, res) => {
   const { assetId, employeeId } = req.body;
   if (!assetId || !employeeId) return res.status(400).json({ error: 'Asset and employee are required' });
 
@@ -127,7 +127,7 @@ router.post('/assign', requireRole('admin', 'hr'), async (req, res) => {
 });
 
 // PUT /api/assets/return/:assignmentId  (admin/hr)
-router.put('/return/:assignmentId', requireRole('admin', 'hr'), async (req, res) => {
+router.put('/return/:assignmentId', requireRole('admin', 'hr', 'it_support'), async (req, res) => {
   const { returnedCondition } = req.body;
 
   const { data: assignment } = await supabase

@@ -272,7 +272,8 @@ export default function Employees() {
                           employee.role === 'admin' ? 'bg-error-100 text-error-700' :
                             employee.role === 'manager' ? 'bg-warning-100 text-warning-700' :
                               employee.role === 'hr' ? 'bg-accent-100 text-accent-700' :
-                                'bg-secondary-100 text-secondary-700'
+                                employee.role === 'it_support' ? 'bg-primary-100 text-primary-700' :
+                                  'bg-secondary-100 text-secondary-700'
                         )}>
                           {employee.role}
                         </span>

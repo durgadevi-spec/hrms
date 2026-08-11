@@ -21,6 +21,10 @@ const moduleLinks = [
   { to: '/assets', label: 'Assets', icon: Package },
 ];
 
+const itSupportLinks = [
+  { to: '/assets', label: 'Assets', icon: Package },
+];
+
 function NavItem({ to, icon: Icon, label, end = false }: { to: string; icon: React.ElementType; label: string; end?: boolean }) {
   return (
     <NavLink
@@ -40,7 +44,7 @@ function NavItem({ to, icon: Icon, label, end = false }: { to: string; icon: Rea
 }
 
 export default function Sidebar() {
-  const { user, isAdmin, logout } = useAuth();
+  const { user, isAdmin, isITSupport, logout } = useAuth();
   const location = useLocation();
   const [showAdminMenu, setShowAdminMenu] = useState(true);
   const [showModulesMenu, setShowModulesMenu] = useState(true);
@@ -119,7 +123,7 @@ export default function Sidebar() {
 
           {(!isAdmin || showModulesMenu) && (
             <div className="space-y-0.5 mt-1">
-              {moduleLinks.map(link => (
+              {(isITSupport ? itSupportLinks : moduleLinks).map(link => (
                 <NavItem key={link.to} to={link.to} icon={link.icon} label={link.label} />
               ))}
             </div>

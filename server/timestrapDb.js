@@ -4,10 +4,8 @@ dotenv.config();
 
 const { Pool } = pg;
 
-// Use the external TimeStrap database URL
-// The user provided: postgresql://postgres.bmigbiajnhhknltuvrso:Durgadevi%4067@aws-1-ap-southeast-2.pooler.supabase.com:6543/postgres?sslmode=require
 const timestrapPool = new Pool({
-    connectionString: 'postgresql://postgres.bmigbiajnhhknltuvrso:Durgadevi%4067@aws-1-ap-southeast-2.pooler.supabase.com:6543/postgres',
+    connectionString: process.env.TIMESTRAP_DB_URL,
     ssl: {
         rejectUnauthorized: false
     }

@@ -1,4 +1,4 @@
-export type Role = 'admin' | 'employee' | 'manager' | 'hr';
+export type Role = 'admin' | 'employee' | 'manager' | 'hr' | 'it_support';
 export type EmployeeStatus = 'active' | 'inactive' | 'on_leave';
 export type ProjectStatus = 'active' | 'completed' | 'on_hold' | 'delayed';
 export type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'on_hold';

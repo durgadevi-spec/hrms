@@ -64,7 +64,7 @@ async function migrate() {
       CREATE TYPE doc_type_enum AS ENUM ('Profile Photo', 'Resume / CV', 'Aadhaar Card', 'PAN Card', 'Passport', 'Passport Visa', 'Visa Document', 'Driving License', 'Educational Certificates', 'Experience Certificates', 'Offer Letter', 'Appointment Letter', 'Salary Slips', 'Relieving Letter', 'Medical Certificate', 'Disability Certificate', 'Police Verification', 'Other Documents');
       CREATE TYPE asset_status_enum AS ENUM ('Available', 'Assigned', 'Damaged', 'Returned', 'Lost');
       CREATE TYPE account_status_enum AS ENUM ('Active', 'Locked', 'Suspended', 'Inactive');
-      CREATE TYPE user_role_enum AS ENUM ('admin', 'hr', 'manager', 'employee');
+      CREATE TYPE user_role_enum AS ENUM ('admin', 'hr', 'manager', 'employee', 'it_support');
 
       -- ─── Departments ──────────────────────────────────────────────────────────
       CREATE TABLE departments (

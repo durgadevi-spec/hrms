@@ -5,7 +5,7 @@ import { useAssets } from '../context/AssetsContext';
 import {
   Plus, Search, Laptop, Smartphone, CreditCard, Key, Package,
   CheckCircle2, Users, X, RotateCcw, UserCheck, Trash2, Edit2, AlertTriangle,
-  LayoutGrid, List, SortAsc, SortDesc
+  LayoutGrid, List, SortAsc, SortDesc, Copy
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { formatDate, cn } from '../utils/formatters';
@@ -33,16 +33,22 @@ const getStatusConf = (s: string) => assetStatusConfig[s] || assetStatusConfig[S
 
 
 // ─── Add Asset Modal ────────────────────────────────────────────────────────
-function AddAssetModal({ asset, onClose }: { asset?: Asset; onClose: () => void }) {
+// `asset` = editing this exact record in place.
+// `cloneFrom` = pre-fill from this record but save as a brand-new asset
+// (serial number and status are left blank/default since those are specific
+// to one physical item, everything else — name, type, location, etc. — carries over).
+function AddAssetModal({ asset, cloneFrom, onClose }: { asset?: Asset; cloneFrom?: Asset; onClose: () => void }) {
   const { addAsset, updateAsset } = useAssets();
+  const source = asset || cloneFrom;
+  const isClone = !asset && !!cloneFrom;
   const [formData, setFormData] = useState({
-    name: asset?.name || '',
-    assetType: (asset as any)?.assetType || 'laptop',
-    serialNumber: asset?.serialNumber || '',
-    status: asset?.status || 'Available',
-    purchaseDate: (asset as any)?.purchaseDate || (asset as any)?.purchase_date || '',
-    location: (asset as any)?.location || '',
-    description: asset?.description || ''
+    name: source?.name || '',
+    assetType: (source as any)?.assetType || 'laptop',
+    serialNumber: asset ? (asset?.serialNumber || '') : '', // never carry over a serial number when cloning
+    status: isClone ? 'Available' : (source?.status || 'Available'), // a clone is a fresh, unassigned item
+    purchaseDate: (source as any)?.purchaseDate || (source as any)?.purchase_date || '',
+    location: (source as any)?.location || '',
+    description: source?.description || ''
   });
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -71,9 +77,16 @@ function AddAssetModal({ asset, onClose }: { asset?: Asset; onClose: () => void 
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
       <div className="relative w-full max-w-2xl max-h-[85vh] bg-white dark:bg-surface-900 rounded-2xl shadow-2xl animate-scale-in flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-surface-200 dark:border-surface-800 flex-shrink-0">
-          <h2 className="text-lg font-bold text-secondary-900 dark:text-white">
-            {asset ? 'Edit Asset' : 'Add New Asset'}
-          </h2>
+          <div>
+            <h2 className="text-lg font-bold text-secondary-900 dark:text-white">
+              {asset ? 'Edit Asset' : isClone ? 'Clone Asset' : 'Add New Asset'}
+            </h2>
+            {isClone && (
+              <p className="text-xs text-secondary-500 mt-0.5">
+                Pre-filled from <span className="font-medium">{cloneFrom?.name}</span> — update the serial number and anything else that's different, then save.
+              </p>
+            )}
+          </div>
           <button onClick={onClose} className="p-2 rounded-lg hover:bg-surface-100 dark:hover:bg-surface-800 text-secondary-400">
             <X className="w-5 h-5" />
           </button>
@@ -326,7 +339,8 @@ function DeleteAssetModal({ asset, onClose, onConfirm }: { asset: Asset; onClose
 // ─── Assets Page ──────────────────────────────────────────────────────────────
 export default function Assets() {
   const navigate = useNavigate();
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, isITSupport } = useAuth();
+  const canManageAssets = isAdmin || isITSupport;
   const { assets, assignments } = useAssets();
   const [employees, setEmployees] = useState<any[]>([]);
 
@@ -355,6 +369,7 @@ export default function Assets() {
   const [assignTarget, setAssignTarget] = useState<Asset | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editTarget, setEditTarget] = useState<Asset | null>(null);
+  const [cloneTarget, setCloneTarget] = useState<Asset | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Asset | null>(null);
 
   const { deleteAsset } = useAssets();
@@ -363,7 +378,7 @@ export default function Assets() {
     assignments.find((aa: any) => aa.assetId === assetId && !aa.returnedDate);
 
   const userVisibleAssets = useMemo(() => {
-    let filtered = isAdmin
+    let filtered = canManageAssets
       ? assets
       : assets.filter(a => {
         const assignment = assignments.find((aa: any) => aa.assetId === a.id && !aa.returnedDate);
@@ -409,7 +424,7 @@ export default function Assets() {
     });
 
     return filtered;
-  }, [assets, assignments, isAdmin, user, search, typeFilter, statusFilter, employeeFilter, sortField, sortDir, employees]);
+  }, [assets, assignments, canManageAssets, user, search, typeFilter, statusFilter, employeeFilter, sortField, sortDir, employees]);
 
   const stats = useMemo(() => ({
     total: assets.length,
@@ -422,10 +437,10 @@ export default function Assets() {
     <div className="animate-fade-in space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-secondary-900 dark:text-white">{isAdmin ? 'Asset Management' : 'My Assets'}</h1>
-          <p className="text-secondary-600 dark:text-surface-400 mt-1">{isAdmin ? 'Track and manage company assets' : 'Assets assigned to you'}</p>
+          <h1 className="text-2xl font-bold text-secondary-900 dark:text-white">{canManageAssets ? 'Asset Management' : 'My Assets'}</h1>
+          <p className="text-secondary-600 dark:text-surface-400 mt-1">{canManageAssets ? 'Track and manage company assets' : 'Assets assigned to you'}</p>
         </div>
-        {isAdmin && (
+        {canManageAssets && (
           <button onClick={() => setShowAddModal(true)} className="btn-primary">
             <Plus className="w-4 h-4" />
             Add Asset
@@ -434,7 +449,7 @@ export default function Assets() {
       </div>
 
       {/* Stats (company-wide — admin only) */}
-      {isAdmin && (
+      {canManageAssets && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           {[
             { label: 'Total Assets', value: stats.total, icon: Package, color: 'primary' },
@@ -475,7 +490,7 @@ export default function Assets() {
               className="input-field pl-10"
             />
           </div>
-          {isAdmin && (
+          {canManageAssets && (
             <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)} className="input-field w-full sm:w-36">
               <option value="all">All Types</option>
               <option value="laptop">Laptop</option>
@@ -485,7 +500,7 @@ export default function Assets() {
               <option value="other">Other</option>
             </select>
           )}
-          {isAdmin && (
+          {canManageAssets && (
             <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="input-field w-full sm:w-36">
               <option value="all">All Status</option>
               <option value="available">Available</option>
@@ -493,7 +508,7 @@ export default function Assets() {
               <option value="damaged">Damaged</option>
             </select>
           )}
-          {isAdmin && (
+          {canManageAssets && (
             <select value={employeeFilter} onChange={e => setEmployeeFilter(e.target.value)} className="input-field w-full sm:w-48">
               <option value="all">All Employees</option>
               {employees.map(e => (
@@ -562,13 +577,13 @@ export default function Assets() {
                       {sortField === 'location' && (sortDir === 'asc' ? <SortAsc className="w-4 h-4" /> : <SortDesc className="w-4 h-4" />)}
                     </button>
                   </th>
-                  {isAdmin && <th className="px-4 py-3 text-right text-xs font-semibold text-secondary-500 uppercase tracking-wider">Actions</th>}
+                  {canManageAssets && <th className="px-4 py-3 text-right text-xs font-semibold text-secondary-500 uppercase tracking-wider">Actions</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-surface-100 dark:divide-surface-800">
                 {userVisibleAssets.length === 0 ? (
                   <tr>
-                    <td colSpan={isAdmin ? 7 : 6} className="px-4 py-12 text-center text-secondary-400">No assets found</td>
+                    <td colSpan={canManageAssets ? 7 : 6} className="px-4 py-12 text-center text-secondary-400">No assets found</td>
                   </tr>
                 ) : (
                   userVisibleAssets.map(asset => {
@@ -610,7 +625,7 @@ export default function Assets() {
                               </div>
                             </div>
                           ) : (
-                            asset.status === 'available' && isAdmin ? (
+                            asset.status === 'available' && canManageAssets ? (
                               <button onClick={() => setAssignTarget(asset as any)} className="text-xs font-medium text-primary-600 hover:text-primary-700 flex items-center gap-1">
                                 <Users className="w-3.5 h-3.5" /> Assign
                               </button>
@@ -623,7 +638,7 @@ export default function Assets() {
                         <td className="px-4 py-4">
                           <span className="text-sm text-secondary-700 dark:text-surface-300">{(asset as any).location || '-'}</span>
                         </td>
-                        {isAdmin && (
+                        {canManageAssets && (
                           <td className="px-4 py-4 text-right">
                             <div className="flex items-center justify-end gap-1">
                               {assignedEmployee && (
@@ -633,6 +648,9 @@ export default function Assets() {
                               )}
                               <button onClick={() => setEditTarget(asset as any)} className="p-1.5 text-secondary-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors" title="Edit">
                                 <Edit2 className="w-4 h-4" />
+                              </button>
+                              <button onClick={() => setCloneTarget(asset as any)} className="p-1.5 text-secondary-400 hover:text-accent-600 hover:bg-accent-50 rounded-lg transition-colors" title="Clone asset">
+                                <Copy className="w-4 h-4" />
                               </button>
                               <button onClick={() => setDeleteTarget(asset as any)} className="p-1.5 text-secondary-400 hover:text-error-600 hover:bg-error-50 rounded-lg transition-colors" title="Delete">
                                 <Trash2 className="w-4 h-4" />
@@ -671,7 +689,7 @@ export default function Assets() {
                     </div>
                     <div className="flex items-center gap-1.5">
                       <span className={cn('badge', statusConf.color)}>{statusConf.label}</span>
-                      {isAdmin && (
+                      {canManageAssets && (
                         <div className="flex items-center gap-0.5">
                           <button
                             onClick={() => setEditTarget(asset as any)}
@@ -679,6 +697,13 @@ export default function Assets() {
                             title="Edit asset"
                           >
                             <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => setCloneTarget(asset as any)}
+                            className="p-1.5 rounded-lg text-secondary-400 hover:text-accent-600 hover:bg-accent-50 transition-colors"
+                            title="Clone asset"
+                          >
+                            <Copy className="w-3.5 h-3.5" />
                           </button>
                           <button
                             onClick={() => setDeleteTarget(asset as any)}
@@ -719,7 +744,7 @@ export default function Assets() {
                             <p className="text-xs text-secondary-500">Since {formatDate(assignment!.assignedDate)}</p>
                           </div>
                         </button>
-                        {isAdmin && (
+                        {canManageAssets && (
                           <button
                             onClick={() => setReturnTarget({ assignmentId: assignment!.id, assetName: asset.name })}
                             className="flex items-center gap-1 text-xs text-warning-600 hover:text-warning-700 font-medium px-2 py-1 rounded-lg hover:bg-warning-50 transition-colors flex-shrink-0"
@@ -731,7 +756,7 @@ export default function Assets() {
                       </div>
                     </div>
                   ) : (
-                    asset.status === 'available' && isAdmin && (
+                    asset.status === 'available' && canManageAssets && (
                       <div className="pt-3 border-t border-surface-100 dark:border-surface-800">
                         <button
                           onClick={() => setAssignTarget(asset as any)}
@@ -752,6 +777,7 @@ export default function Assets() {
 
       {showAddModal && <AddAssetModal onClose={() => setShowAddModal(false)} />}
       {editTarget && <AddAssetModal asset={editTarget} onClose={() => setEditTarget(null)} />}
+      {cloneTarget && <AddAssetModal cloneFrom={cloneTarget} onClose={() => setCloneTarget(null)} />}
 
       {assignTarget && (
         <AssignEmployeeModal
