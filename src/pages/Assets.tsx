@@ -625,7 +625,7 @@ export default function Assets() {
                               </div>
                             </div>
                           ) : (
-                            asset.status === 'available' && canManageAssets ? (
+                            String(asset.status || '').toLowerCase() === 'available' && canManageAssets ? (
                               <button onClick={() => setAssignTarget(asset as any)} className="text-xs font-medium text-primary-600 hover:text-primary-700 flex items-center gap-1">
                                 <Users className="w-3.5 h-3.5" /> Assign
                               </button>
@@ -756,7 +756,7 @@ export default function Assets() {
                       </div>
                     </div>
                   ) : (
-                    asset.status === 'available' && canManageAssets && (
+                    String(asset.status || '').toLowerCase() === 'available' && canManageAssets && (
                       <div className="pt-3 border-t border-surface-100 dark:border-surface-800">
                         <button
                           onClick={() => setAssignTarget(asset as any)}
