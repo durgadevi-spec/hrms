@@ -3,6 +3,20 @@ import { Calendar, Check, X, Clock, Sun, Coffee, FileText, AlertCircle, Search, 
 import { api } from '../lib/api';
 import { formatDate, cn } from '../utils/formatters';
 
+function toLocalDateKey(dateInput: string | Date | null | undefined): string {
+  if (!dateInput) return '';
+  if (dateInput instanceof Date) {
+    return `${dateInput.getFullYear()}-${String(dateInput.getMonth() + 1).padStart(2, '0')}-${String(dateInput.getDate()).padStart(2, '0')}`;
+  }
+  const plainDateMatch = /^\d{4}-\d{2}-\d{2}$/.exec(dateInput);
+  if (plainDateMatch) {
+    return dateInput;
+  }
+  const parsed = new Date(dateInput);
+  if (Number.isNaN(parsed.getTime())) return '';
+  return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, '0')}-${String(parsed.getDate()).padStart(2, '0')}`;
+}
+
 const statusConfig: Record<string, { color: string; icon: any }> = {
   Pending: { color: 'bg-warning-100 text-warning-700', icon: Clock },
   Approved: { color: 'bg-success-100 text-success-700', icon: Check },
@@ -183,14 +197,14 @@ export default function Leaves() {
 
     const permsThisMonth = permissions.filter(p => {
       if (!p.permissionDate) return false;
-      const d = new Date(p.permissionDate);
-      return d.getFullYear() === year && d.getMonth() === month && (p.status || '').toLowerCase() === 'approved';
+      const dKey = toLocalDateKey(p.permissionDate);
+      return dKey.startsWith(`${year}-${String(month + 1).padStart(2, '0')}-`) && (p.status || '').toLowerCase() === 'approved';
     });
 
     const leavesThisMonth = history.filter(l => {
       if (!l.startDate) return false;
-      const d = new Date(l.startDate);
-      return d.getFullYear() === year && d.getMonth() === month && (l.status || '').toLowerCase() === 'approved';
+      const dKey = toLocalDateKey(l.startDate);
+      return dKey.startsWith(`${year}-${String(month + 1).padStart(2, '0')}-`) && (l.status || '').toLowerCase() === 'approved';
     });
 
     return {
@@ -203,10 +217,10 @@ export default function Leaves() {
   // Helper to check if a day has leaves or permissions
   const getDayEvents = (date: Date | null) => {
     if (!date) return { leaves: [], perms: [] };
-    const dateStr = date.toISOString().split('T')[0];
+    const dateStr = toLocalDateKey(date);
 
-    const leaves = history.filter(l => l.startDate && l.startDate.startsWith(dateStr));
-    const perms = permissions.filter(p => p.permissionDate && p.permissionDate.startsWith(dateStr));
+    const leaves = history.filter(l => l.startDate && toLocalDateKey(l.startDate) === dateStr);
+    const perms = permissions.filter(p => p.permissionDate && toLocalDateKey(p.permissionDate) === dateStr);
 
     return { leaves, perms };
   };
