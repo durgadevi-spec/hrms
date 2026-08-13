@@ -5,13 +5,14 @@ import { useAssets } from '../context/AssetsContext';
 import {
   Mail, Phone, MapPin, Calendar, Building2, Users,
   GraduationCap, Heart, Globe, Droplets, AlertTriangle, UserX,
-  Laptop, Smartphone, CreditCard, Key, Package, CheckCircle2,
+  Package, CheckCircle2,
   Clock, UserCheck, X, Shield, ArrowLeft, Edit2, ChevronRight,
   Plus, RotateCcw, Crown, Save, Briefcase, Award, Activity,
   FileText, TrendingUp, Star, User
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { formatDate, cn } from '../utils/formatters';
+import { getIconComponent } from '../utils/iconMap';
 import type { AssetType } from '../types';
 
 // ─── Avatar ───────────────────────────────────────────────────────────────────
@@ -46,23 +47,27 @@ function Avatar({ firstName, lastName, size = 'lg', color }: {
   );
 }
 
-// ─── Asset icons ──────────────────────────────────────────────────────────────
-const assetTypeIcon: any = {
-  laptop: Laptop, mobile: Smartphone, id_card: CreditCard, access_card: Key, other: Package,
-};
-const assetTypeColor: any = {
-  laptop: 'bg-blue-50 text-blue-600 border border-blue-100',
-  mobile: 'bg-violet-50 text-violet-600 border border-violet-100',
-  id_card: 'bg-amber-50 text-amber-600 border border-amber-100',
-  access_card: 'bg-rose-50 text-rose-600 border border-rose-100',
-  other: 'bg-gray-50 text-gray-500 border border-gray-100',
+// ─── Get asset type styling from database ─────────────────────────────────────
+// Falls back to Package icon and gray color if type not found
+const getAssetTypeStyle = (typeName: string, assetTypes: any[]) => {
+  const type = assetTypes.find(t => t.name === typeName);
+  if (type) {
+    return {
+      icon: getIconComponent(type.icon),
+      color: type.color || 'bg-gray-50 text-gray-500 border border-gray-100'
+    };
+  }
+  return {
+    icon: Package,
+    color: 'bg-gray-50 text-gray-500 border border-gray-100'
+  };
 };
 
 import EmployeeProfileForm from '../components/employees/EmployeeProfileForm';
 
 // ─── Assign Asset Modal ───────────────────────────────────────────────────────
 function AssignAssetModal({ employeeId, employeeName, onClose, onAssigned }: { employeeId: string; employeeName: string; onClose: () => void; onAssigned?: () => void }) {
-  const { assets, assignAsset, refresh } = useAssets();
+  const { assets, assetTypes, assignAsset, refresh } = useAssets();
   // Case-insensitive status check to handle 'available' / 'Available' / 'AVAILABLE' consistently
   const available = assets.filter(a => String(a.status || '').toLowerCase() === 'available');
   // Also include assets with no status or empty status (treat as available for safety)
@@ -97,12 +102,13 @@ function AssignAssetModal({ employeeId, employeeName, onClose, onAssigned }: { e
               )}
             </div>
           ) : allAvailable.map(asset => {
-            const Icon = assetTypeIcon[asset.assetType];
+            const typeStyle = getAssetTypeStyle(asset.assetType, assetTypes);
+            const Icon = typeStyle.icon;
             const sel = selectedId === asset.id;
             return (
               <button key={asset.id} onClick={() => { setSelectedId(asset.id); setError(''); }}
                 className={cn('w-full flex items-center gap-3 p-3 rounded-xl border-2 transition-all text-left', sel ? 'border-primary-500 bg-primary-50' : 'border-secondary-200 hover:border-secondary-300')}>
-                <div className={cn('w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0', assetTypeColor[asset.assetType])}><Icon className="w-4 h-4" /></div>
+                <div className={cn('w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0', typeStyle.color)}><Icon className="w-4 h-4" /></div>
                 <div className="flex-1 min-w-0"><p className="text-sm font-semibold text-secondary-900 truncate">{asset.name}</p>{asset.serialNumber && <p className="text-xs text-secondary-400">S/N: {asset.serialNumber}</p>}</div>
                 {sel && <CheckCircle2 className="w-5 h-5 text-primary-500 flex-shrink-0" />}
               </button>
@@ -203,7 +209,7 @@ export default function Profile() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { isAdmin } = useAuth();
-  const { getEmployeeAssets } = useAssets();
+  const { getEmployeeAssets, assetTypes } = useAssets();
 
   const [employeeData, setEmployeeData] = useState<any>(null);
   const [departments, setDepartments] = useState<any[]>([]);
@@ -604,10 +610,11 @@ export default function Profile() {
                   ) : (
                     <div className="grid grid-cols-2 gap-2.5">
                       {employeeAssets.map(({ asset, assignment }: any) => {
-                        const Icon = assetTypeIcon[asset.assetType] || Package;
+                        const typeStyle = getAssetTypeStyle(asset.assetType, assetTypes);
+                        const Icon = typeStyle.icon;
                         return (
                           <div key={assignment.id} className="flex items-center gap-3 p-3 bg-secondary-50 rounded-xl border border-secondary-100">
-                            <div className={cn('w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0', assetTypeColor[asset.assetType] || assetTypeColor.other)}>
+                            <div className={cn('w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0', typeStyle.color)}>
                               <Icon className="w-4 h-4" />
                             </div>
                             <div className="flex-1 min-w-0">

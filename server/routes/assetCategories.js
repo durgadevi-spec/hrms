@@ -34,10 +34,38 @@ router.post('/', requireRole('admin', 'hr', 'it_support'), async (req, res) => {
   return res.status(201).json(toCamel(data));
 });
 
+// PUT /api/asset-categories/:id  (admin/hr/it_support)
+router.put('/:id', requireRole('admin', 'hr', 'it_support'), async (req, res) => {
+  const { name, hardwareProfile } = req.body;
+  if (!name || !name.trim()) return res.status(400).json({ error: 'Category name is required' });
+  const profile = VALID_PROFILES.includes(hardwareProfile) ? hardwareProfile : 'none';
+
+  const { data, error } = await supabase
+    .from('asset_categories')
+    .update({ name: name.trim(), hardware_profile: profile })
+    .eq('id', req.params.id)
+    .select()
+    .single();
+
+  if (error) {
+    if (error.code === '23505') return res.status(409).json({ error: 'That category already exists' });
+    return res.status(500).json({ error: error.message });
+  }
+  return res.json(toCamel(data));
+});
+
 // DELETE /api/asset-categories/:id  (admin/hr/it_support)
 router.delete('/:id', requireRole('admin', 'hr', 'it_support'), async (req, res) => {
-  const { data: existing } = await supabase.from('asset_categories').select('is_system').eq('id', req.params.id).single();
-  if (existing?.is_system) return res.status(400).json({ error: 'Built-in categories cannot be deleted' });
+  // Check if this is a system (built-in) asset category
+  const { data: categoryData, error: fetchError } = await supabase
+    .from('asset_categories')
+    .select('is_system')
+    .eq('id', req.params.id)
+    .single();
+
+  if (fetchError) return res.status(500).json({ error: fetchError.message });
+  if (!categoryData) return res.status(404).json({ error: 'Asset category not found' });
+  if (categoryData.is_system) return res.status(403).json({ error: 'Built-in asset categories cannot be deleted' });
 
   const { error } = await supabase.from('asset_categories').delete().eq('id', req.params.id);
   if (error) return res.status(500).json({ error: error.message });

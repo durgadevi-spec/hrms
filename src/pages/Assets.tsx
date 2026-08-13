@@ -3,34 +3,30 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useAssets } from '../context/AssetsContext';
 import {
-  Plus, Search, Laptop, Smartphone, CreditCard, Key, Package, Monitor, Router as RouterIcon,
-  Armchair, Cpu, Image as ImageIcon, Upload,
+  Plus, Search, Package, Upload,
   UploadCloud, File as FileIcon, FileText, DollarSign, Building2, ShieldCheck,
   CheckCircle2, Users, X, RotateCcw, UserCheck, Trash2, Edit2, AlertTriangle,
-  LayoutGrid, List, SortAsc, SortDesc, Copy
+  LayoutGrid, List, SortAsc, SortDesc, Copy, Cpu, Image as ImageIcon
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { formatDate, cn } from '../utils/formatters';
+import { getIconComponent } from '../utils/iconMap';
 import type { Asset, AssetDocument } from '../types';
 
-// Built-in icon/color lookup for the asset types that ship with the system.
-// Anything added later (a custom type/category from the UI) falls back to a
-// generic Package icon — it still works perfectly, it just isn't hand-styled.
-const builtInTypeStyle: Record<string, { icon: React.ElementType; color: string }> = {
-  laptop: { icon: Laptop, color: 'bg-primary-100 text-primary-600' },
-  mobile: { icon: Smartphone, color: 'bg-accent-100 text-accent-600' },
-  id_card: { icon: CreditCard, color: 'bg-warning-100 text-warning-600' },
-  access_card: { icon: Key, color: 'bg-error-100 text-error-600' },
-  other: { icon: Package, color: 'bg-secondary-100 text-secondary-600' },
-  desktop: { icon: Monitor, color: 'bg-primary-100 text-primary-600' },
-  monitor: { icon: Monitor, color: 'bg-primary-100 text-primary-600' },
-  tablet: { icon: Smartphone, color: 'bg-accent-100 text-accent-600' },
-  networking: { icon: RouterIcon, color: 'bg-teal-100 text-teal-600' },
-  furniture: { icon: Armchair, color: 'bg-orange-100 text-orange-600' },
-};
-const getTypeStyle = (typeName: string) => {
-  const key = String(typeName || '').toLowerCase().replace(/[\s-]+/g, '_');
-  return builtInTypeStyle[key] || { icon: Package, color: 'bg-secondary-100 text-secondary-600' };
+// Get type styling from database-backed asset types
+// Falls back to Package icon and secondary color if type not found
+const getTypeStyle = (typeName: string, assetTypes: any[]) => {
+  const type = assetTypes.find(t => t.name === typeName);
+  if (type) {
+    return {
+      icon: getIconComponent(type.icon),
+      color: type.color || 'bg-secondary-100 text-secondary-600'
+    };
+  }
+  return {
+    icon: Package,
+    color: 'bg-secondary-100 text-secondary-600'
+  };
 };
 
 const assetStatusConfig: Record<string, { color: string; label: string }> = {
@@ -76,106 +72,114 @@ function SectionHeading({ icon: Icon, title }: { icon: React.ElementType; title:
 
 // Small inline "add new" control used for both Type and Category selects, so
 // Admin/IT Support can grow either list without leaving the Add Asset form.
-function AddOptionInline({ placeholder, onAdd, extra }: {
-  placeholder: string;
-  onAdd: (name: string) => Promise<void>;
-  extra?: React.ReactNode;
-}) {
-  const [open, setOpen] = useState(false);
-  const [value, setValue] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [err, setErr] = useState('');
-
-  const handleAdd = async () => {
-    if (!value.trim()) return;
-    setSaving(true);
-    setErr('');
-    try {
-      await onAdd(value.trim());
-      setValue('');
-      setOpen(false);
-    } catch (e: any) {
-      setErr(e.message || 'Failed to add');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  if (!open) {
-    return (
-      <button type="button" onClick={() => setOpen(true)} className="mt-1.5 text-xs font-medium text-primary-600 hover:text-primary-700 flex items-center gap-1">
-        <Plus className="w-3 h-3" /> Add new
-      </button>
-    );
-  }
-
-  return (
-    <div className="mt-1.5 p-2.5 bg-surface-50 dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded-lg space-y-2">
-      <div className="flex gap-2">
-        <input
-          autoFocus
-          value={value}
-          onChange={e => setValue(e.target.value)}
-          placeholder={placeholder}
-          className="input-field py-1.5 text-sm flex-1"
-          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAdd(); } }}
-        />
-      </div>
-      {extra}
-      {err && <p className="text-xs text-error-600">{err}</p>}
-      <div className="flex gap-2">
-        <button type="button" disabled={saving} onClick={handleAdd} className="text-xs font-semibold text-white bg-primary-600 hover:bg-primary-700 rounded-md px-2.5 py-1 disabled:opacity-50">
-          {saving ? 'Adding...' : 'Add'}
-        </button>
-        <button type="button" onClick={() => { setOpen(false); setValue(''); setErr(''); }} className="text-xs font-medium text-secondary-500 hover:text-secondary-700 px-2.5 py-1">
-          Cancel
-        </button>
-      </div>
-    </div>
-  );
-}
-
 function AddAssetTypeModal({ onClose }: { onClose: () => void }) {
-  const { addAssetType } = useAssets();
+  const { addAssetType, updateAssetType, deleteAssetType, assetTypes } = useAssets();
   const [value, setValue] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+
+  const resetForm = () => {
+    setValue('');
+    setEditingId(null);
+    setError('');
+  };
 
   const handleSubmit = async () => {
     if (!value.trim()) return;
     setSaving(true);
     setError('');
     try {
-      await addAssetType(value.trim());
-      onClose();
+      if (editingId) {
+        await updateAssetType(editingId, value.trim());
+      } else {
+        await addAssetType(value.trim());
+      }
+      resetForm();
     } catch (e: any) {
-      setError(e.message || 'Failed to add asset type');
+      setError(e.message || 'Failed to save asset type');
     } finally {
       setSaving(false);
     }
   };
 
+  const handleEdit = (type: { id: string; name: string }) => {
+    setEditingId(type.id);
+    setValue(type.name);
+    setError('');
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      await deleteAssetType(id);
+      if (editingId === id) resetForm();
+    } catch (e: any) {
+      setError(e.message || 'Failed to delete asset type');
+    }
+  };
+
+  // Filter types based on search
+  const filteredTypes = assetTypes.filter(type =>
+    type.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-md bg-white dark:bg-surface-900 rounded-2xl shadow-2xl animate-scale-in p-6">
+      <div className="relative w-full max-w-4xl bg-white dark:bg-surface-900 rounded-2xl shadow-2xl animate-scale-in p-6">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-bold text-secondary-900 dark:text-white">Add Asset Type</h2>
+          <h2 className="text-lg font-bold text-secondary-900 dark:text-white">Asset Types</h2>
           <button onClick={onClose} className="p-2 rounded-lg hover:bg-surface-100 dark:hover:bg-surface-800 text-secondary-400">
             <X className="w-5 h-5" />
           </button>
         </div>
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-secondary-700 dark:text-surface-300 mb-1.5">Type name</label>
-            <input value={value} onChange={e => setValue(e.target.value)} placeholder="e.g. Monitor, Printer, Dock" className="input-field" />
+
+        <div className="flex gap-6">
+          <div className="w-80 space-y-3">
+            <div>
+              <label className="block text-sm font-medium text-secondary-700 dark:text-surface-300 mb-1.5">{editingId ? 'Edit type' : 'Type name'}</label>
+              <input value={value} onChange={e => setValue(e.target.value)} placeholder="e.g. Monitor, Printer, Dock" className="input-field" />
+            </div>
+
+            <div className="flex gap-2">
+              <button type="button" onClick={resetForm} className="btn-secondary flex-1 text-sm">Clear</button>
+              <button type="button" disabled={saving || !value.trim()} onClick={handleSubmit} className="btn-primary flex-1 text-sm disabled:opacity-50">
+                {saving ? 'Saving...' : editingId ? 'Save' : 'Add'}
+              </button>
+            </div>
+
+            {error && <p className="text-xs text-error-600 bg-error-50 p-2 rounded">{error}</p>}
           </div>
-          {error && <p className="text-xs text-error-600 bg-error-50 p-2 rounded">{error}</p>}
-          <div className="flex gap-3">
-            <button type="button" onClick={onClose} className="btn-secondary flex-1">Cancel</button>
-            <button type="button" disabled={saving || !value.trim()} onClick={handleSubmit} className="btn-primary flex-1 disabled:opacity-50">
-              {saving ? 'Saving...' : 'Add Type'}
-            </button>
+
+          <div className="flex-1 flex flex-col">
+            <div className="mb-3">
+              <label className="block text-sm font-medium text-secondary-700 dark:text-surface-300 mb-1.5">Search types</label>
+              <input 
+                value={searchTerm} 
+                onChange={e => setSearchTerm(e.target.value)} 
+                placeholder="Search by name..." 
+                className="input-field" 
+              />
+            </div>
+
+            <div className="border border-surface-200 dark:border-surface-700 rounded-xl flex-1 min-h-0 overflow-y-auto">
+              <div className="p-2 space-y-2">
+                {filteredTypes.length === 0 ? (
+                  <p className="text-sm text-secondary-400 p-2">{assetTypes.length === 0 ? 'No asset types yet.' : 'No types match your search.'}</p>
+                ) : (
+                  filteredTypes.map(type => (
+                    <div key={type.id} className="flex items-center justify-between gap-3 rounded-lg p-2 hover:bg-surface-50 dark:hover:bg-surface-800">
+                      <span className="text-sm font-medium text-secondary-700 dark:text-surface-200">{type.name}</span>
+                      <div className="flex gap-2">
+                        <button type="button" onClick={() => handleEdit(type)} className="text-xs px-2 py-1 rounded bg-primary-50 text-primary-700 hover:bg-primary-100">Edit</button>
+                        <button type="button" onClick={() => handleDelete(type.id)} className="text-xs px-2 py-1 rounded bg-error-50 text-error-700 hover:bg-error-100">Delete</button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -184,55 +188,127 @@ function AddAssetTypeModal({ onClose }: { onClose: () => void }) {
 }
 
 function AddAssetCategoryModal({ onClose }: { onClose: () => void }) {
-  const { addAssetCategory } = useAssets();
+  const { addAssetCategory, updateAssetCategory, deleteAssetCategory, assetCategories } = useAssets();
   const [name, setName] = useState('');
   const [profile, setProfile] = useState<'computer' | 'mobile' | 'none'>('none');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+
+  const resetForm = () => {
+    setName('');
+    setProfile('none');
+    setEditingId(null);
+    setError('');
+  };
 
   const handleSubmit = async () => {
     if (!name.trim()) return;
     setSaving(true);
     setError('');
     try {
-      await addAssetCategory(name.trim(), profile);
-      onClose();
+      if (editingId) {
+        await updateAssetCategory(editingId, name.trim(), profile);
+      } else {
+        await addAssetCategory(name.trim(), profile);
+      }
+      resetForm();
     } catch (e: any) {
-      setError(e.message || 'Failed to add asset category');
+      setError(e.message || 'Failed to save asset category');
     } finally {
       setSaving(false);
     }
   };
 
+  const handleEdit = (category: { id: string; name: string; hardwareProfile: 'computer' | 'mobile' | 'none' }) => {
+    setEditingId(category.id);
+    setName(category.name);
+    setProfile(category.hardwareProfile);
+    setError('');
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      await deleteAssetCategory(id);
+      if (editingId === id) resetForm();
+    } catch (e: any) {
+      setError(e.message || 'Failed to delete asset category');
+    }
+  };
+
+  // Filter categories based on search
+  const filteredCategories = assetCategories.filter(category =>
+    category.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-md bg-white dark:bg-surface-900 rounded-2xl shadow-2xl animate-scale-in p-6">
+      <div className="relative w-full max-w-4xl bg-white dark:bg-surface-900 rounded-2xl shadow-2xl animate-scale-in p-6">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-bold text-secondary-900 dark:text-white">Add Asset Category</h2>
+          <h2 className="text-lg font-bold text-secondary-900 dark:text-white">Asset Categories</h2>
           <button onClick={onClose} className="p-2 rounded-lg hover:bg-surface-100 dark:hover:bg-surface-800 text-secondary-400">
             <X className="w-5 h-5" />
           </button>
         </div>
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-secondary-700 dark:text-surface-300 mb-1.5">Category name</label>
-            <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Office Equipment, Furniture" className="input-field" />
+
+        <div className="flex gap-6">
+          <div className="w-80 space-y-3">
+            <div>
+              <label className="block text-sm font-medium text-secondary-700 dark:text-surface-300 mb-1.5">{editingId ? 'Edit category' : 'Category name'}</label>
+              <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Office Equipment, Furniture" className="input-field" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-secondary-700 dark:text-surface-300 mb-1.5">Hardware profile</label>
+              <select value={profile} onChange={e => setProfile(e.target.value as 'computer' | 'mobile' | 'none')} className="input-field text-sm">
+                <option value="none">No hardware specs</option>
+                <option value="computer">Computer / laptop</option>
+                <option value="mobile">Mobile / tablet</option>
+              </select>
+            </div>
+
+            <div className="flex gap-2">
+              <button type="button" onClick={resetForm} className="btn-secondary flex-1 text-sm">Clear</button>
+              <button type="button" disabled={saving || !name.trim()} onClick={handleSubmit} className="btn-primary flex-1 text-sm disabled:opacity-50">
+                {saving ? 'Saving...' : editingId ? 'Save' : 'Add'}
+              </button>
+            </div>
+
+            {error && <p className="text-xs text-error-600 bg-error-50 p-2 rounded">{error}</p>}
           </div>
-          <div>
-            <label className="block text-sm font-medium text-secondary-700 dark:text-surface-300 mb-1.5">Hardware profile</label>
-            <select value={profile} onChange={e => setProfile(e.target.value as 'computer' | 'mobile' | 'none')} className="input-field">
-              <option value="none">No hardware specs</option>
-              <option value="computer">Computer / laptop specs</option>
-              <option value="mobile">Mobile / tablet specs</option>
-            </select>
-          </div>
-          {error && <p className="text-xs text-error-600 bg-error-50 p-2 rounded">{error}</p>}
-          <div className="flex gap-3">
-            <button type="button" onClick={onClose} className="btn-secondary flex-1">Cancel</button>
-            <button type="button" disabled={saving || !name.trim()} onClick={handleSubmit} className="btn-primary flex-1 disabled:opacity-50">
-              {saving ? 'Saving...' : 'Add Category'}
-            </button>
+
+          <div className="flex-1 flex flex-col">
+            <div className="mb-3">
+              <label className="block text-sm font-medium text-secondary-700 dark:text-surface-300 mb-1.5">Search categories</label>
+              <input 
+                value={searchTerm} 
+                onChange={e => setSearchTerm(e.target.value)} 
+                placeholder="Search by name..." 
+                className="input-field" 
+              />
+            </div>
+
+            <div className="border border-surface-200 dark:border-surface-700 rounded-xl flex-1 min-h-0 overflow-y-auto">
+              <div className="p-2 space-y-2">
+                {filteredCategories.length === 0 ? (
+                  <p className="text-sm text-secondary-400 p-2">{assetCategories.length === 0 ? 'No asset categories yet.' : 'No categories match your search.'}</p>
+                ) : (
+                  filteredCategories.map(category => (
+                    <div key={category.id} className="flex items-center justify-between gap-3 rounded-lg p-2 hover:bg-surface-50 dark:hover:bg-surface-800">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-secondary-700 dark:text-surface-200 truncate">{category.name}</p>
+                        <p className="text-[10px] uppercase tracking-wide text-secondary-400">{category.hardwareProfile}</p>
+                      </div>
+                      <div className="flex gap-2">
+                        <button type="button" onClick={() => handleEdit(category)} className="text-xs px-2 py-1 rounded bg-primary-50 text-primary-700 hover:bg-primary-100">Edit</button>
+                        <button type="button" onClick={() => handleDelete(category.id)} className="text-xs px-2 py-1 rounded bg-error-50 text-error-700 hover:bg-error-100">Delete</button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -880,13 +956,6 @@ export default function Assets() {
     return filtered;
   }, [assets, assignments, canManageAssets, user, search, typeFilter, statusFilter, employeeFilter, sortField, sortDir, employees]);
 
-  const stats = useMemo(() => ({
-    total: assets.length,
-    available: assets.filter(a => String(a.status || '').toLowerCase() === 'available').length,
-    assigned: assets.filter(a => String(a.status || '').toLowerCase() === 'assigned').length,
-    laptops: assets.filter((a: any) => String(a.assetType || '').toLowerCase() === 'laptop').length,
-  }), [assets]);
-
   return (
     <div className="animate-fade-in space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -911,35 +980,6 @@ export default function Assets() {
           </div>
         )}
       </div>
-
-      {/* Stats (company-wide — admin only) */}
-      {canManageAssets && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          {[
-            { label: 'Total Assets', value: stats.total, icon: Package, color: 'primary' },
-            { label: 'Available', value: stats.available, icon: CheckCircle2, color: 'success' },
-            { label: 'Assigned', value: stats.assigned, icon: Users, color: 'warning' },
-            { label: 'Laptops', value: stats.laptops, icon: Laptop, color: 'accent' },
-          ].map((s, i) => (
-            <div key={i} className="card p-5">
-              <div className="flex items-center gap-3">
-                <div className={cn('w-10 h-10 rounded-lg flex items-center justify-center',
-                  s.color === 'primary' ? 'bg-primary-100 text-primary-600' :
-                    s.color === 'success' ? 'bg-success-100 text-success-600' :
-                      s.color === 'warning' ? 'bg-warning-100 text-warning-600' :
-                        'bg-accent-100 text-accent-600'
-                )}>
-                  <s.icon className="w-5 h-5" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-secondary-900 dark:text-white">{s.value}</p>
-                  <p className="text-sm text-secondary-600 dark:text-surface-400">{s.label}</p>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
 
       {/* Filters */}
       <div className="card p-4">
@@ -1045,7 +1085,7 @@ export default function Assets() {
                   </tr>
                 ) : (
                   userVisibleAssets.map(asset => {
-                    const typeStyle = getTypeStyle(asset.assetType);
+                    const typeStyle = getTypeStyle(asset.assetType, assetTypes);
                     const statusConf = getStatusConf(asset.status);
                     const TypeIcon = typeStyle.icon;
                     const assignment = getAssignment(asset.id);
@@ -1133,7 +1173,7 @@ export default function Assets() {
             </div>
           ) : (
             userVisibleAssets.map(asset => {
-              const typeStyle = getTypeStyle(asset.assetType);
+              const typeStyle = getTypeStyle(asset.assetType, assetTypes);
               const statusConf = getStatusConf(asset.status);
               const TypeIcon = typeStyle.icon;
               const assignment = getAssignment(asset.id);

@@ -33,7 +33,11 @@ interface AssetsContextType {
   // Dynamic type/category management — lets Admin/IT Support add new options
   // straight from the Assets page instead of editing backend code.
   addAssetType: (name: string) => Promise<AssetTypeOption>;
+  updateAssetType: (id: string, name: string) => Promise<AssetTypeOption>;
+  deleteAssetType: (id: string) => Promise<void>;
   addAssetCategory: (name: string, hardwareProfile: 'computer' | 'mobile' | 'none') => Promise<AssetCategoryOption>;
+  updateAssetCategory: (id: string, name: string, hardwareProfile: 'computer' | 'mobile' | 'none') => Promise<AssetCategoryOption>;
+  deleteAssetCategory: (id: string) => Promise<void>;
 
   // Assignment actions
   assignAsset: (assetId: string, employeeId: string) => Promise<void>;
@@ -121,10 +125,32 @@ export function AssetsProvider({ children }: { children: ReactNode }) {
     return created as AssetTypeOption;
   };
 
+  const updateAssetType = async (id: string, name: string) => {
+    const updated = await api.put(`/api/asset-types/${id}`, { name });
+    setAssetTypes(prev => prev.map(item => item.id === id ? { ...item, name: updated.name } : item).sort((a, b) => a.name.localeCompare(b.name)));
+    return updated as AssetTypeOption;
+  };
+
+  const deleteAssetType = async (id: string) => {
+    await api.delete(`/api/asset-types/${id}`);
+    setAssetTypes(prev => prev.filter(item => item.id !== id));
+  };
+
   const addAssetCategory = async (name: string, hardwareProfile: 'computer' | 'mobile' | 'none') => {
     const created = await api.post('/api/asset-categories', { name, hardwareProfile });
     setAssetCategories(prev => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
     return created as AssetCategoryOption;
+  };
+
+  const updateAssetCategory = async (id: string, name: string, hardwareProfile: 'computer' | 'mobile' | 'none') => {
+    const updated = await api.put(`/api/asset-categories/${id}`, { name, hardwareProfile });
+    setAssetCategories(prev => prev.map(item => item.id === id ? { ...item, name: updated.name, hardwareProfile: updated.hardwareProfile } : item).sort((a, b) => a.name.localeCompare(b.name)));
+    return updated as AssetCategoryOption;
+  };
+
+  const deleteAssetCategory = async (id: string) => {
+    await api.delete(`/api/asset-categories/${id}`);
+    setAssetCategories(prev => prev.filter(item => item.id !== id));
   };
 
   // ── Assignment actions ───────────────────────────────────────────────────────
@@ -200,7 +226,11 @@ export function AssetsProvider({ children }: { children: ReactNode }) {
         updateAsset,
         deleteAsset,
         addAssetType,
+        updateAssetType,
+        deleteAssetType,
         addAssetCategory,
+        updateAssetCategory,
+        deleteAssetCategory,
         assignAsset,
         returnAsset,
         getEmployeeAssets,

@@ -1,5 +1,6 @@
-import { Package, Plus, Trash2, Laptop, Smartphone, CreditCard, Key } from 'lucide-react';
+import { Package, Plus, Trash2 } from 'lucide-react';
 import { useAssets } from '../../../context/AssetsContext';
+import { getIconComponent } from '../../../utils/iconMap';
 
 interface Props {
   employeeId?: string;
@@ -8,16 +9,8 @@ interface Props {
   onChange: (data: any[]) => void;
 }
 
-const typeIcons: Record<string, React.ElementType> = {
-  laptop: Laptop,
-  mobile: Smartphone,
-  id_card: CreditCard,
-  access_card: Key,
-  other: Package,
-};
-
 export default function AssetsForm({ employeeId, data, onChange }: Props) {
-  const { assets, assignments, getAvailableAssets } = useAssets();
+  const { assets, assignments, assetTypes, getAvailableAssets } = useAssets();
 
   // Assets currently assigned to this employee
   const employeeAssignments = employeeId
@@ -63,7 +56,8 @@ export default function AssetsForm({ employeeId, data, onChange }: Props) {
           <h4 className="text-sm font-semibold text-secondary-700 dark:text-surface-300">Currently Assigned</h4>
           {employeeAssignments.map(assignment => {
             const asset = assets.find(a => a.id === assignment.assetId);
-            const TypeIcon = typeIcons[(asset as any)?.assetType] || Package;
+            const assetType = assetTypes.find(t => t.name === (asset as any)?.assetType);
+            const TypeIcon = getIconComponent(assetType?.icon) || Package;
             return (
               <div key={assignment.id} className="flex items-center gap-3 p-3 bg-success-50 dark:bg-success-900/10 border border-success-200 dark:border-success-800 rounded-lg">
                 <div className="w-8 h-8 rounded-lg bg-success-100 dark:bg-success-900/30 flex items-center justify-center">
@@ -87,7 +81,8 @@ export default function AssetsForm({ employeeId, data, onChange }: Props) {
         <div className="space-y-2">
           <h4 className="text-sm font-semibold text-secondary-700 dark:text-surface-300">New Assignments (pending save)</h4>
           {data.map((item, index) => {
-            const TypeIcon = typeIcons[item.assetType] || Package;
+            const assetType = assetTypes.find(t => t.name === item.assetType);
+            const TypeIcon = getIconComponent(assetType?.icon) || Package;
             return (
               <div key={index} className="flex items-center gap-3 p-3 bg-warning-50 dark:bg-warning-900/10 border border-warning-200 dark:border-warning-800 rounded-lg group relative">
                 <div className="w-8 h-8 rounded-lg bg-warning-100 dark:bg-warning-900/30 flex items-center justify-center">
@@ -122,7 +117,8 @@ export default function AssetsForm({ employeeId, data, onChange }: Props) {
             {availableAssets
               .filter(a => !data.find(d => d.assetId === a.id))
               .map(asset => {
-                const TypeIcon = typeIcons[asset.assetType || (asset as any).asset_type] || Package;
+                const assetType = assetTypes.find(t => t.name === (asset.assetType || (asset as any).asset_type));
+                const TypeIcon = getIconComponent(assetType?.icon) || Package;
                 return (
                   <button
                     key={asset.id}
