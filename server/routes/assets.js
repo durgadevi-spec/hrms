@@ -6,6 +6,57 @@ import authMiddleware, { requireRole } from '../middleware/auth.js';
 const router = Router();
 router.use(authMiddleware);
 
+// Fields that map 1:1 (camelCase body key -> snake_case column), used by both
+// create and update so the two stay in sync as the form grows.
+const ASSET_FIELD_MAP = {
+  name: 'name',
+  assetType: 'asset_type',
+  category: 'category',
+  assetCode: 'asset_code',
+  serialNumber: 'serial_number',
+  brand: 'brand',
+  model: 'model',
+  processor: 'processor',
+  ram: 'ram',
+  storageType: 'storage_type',
+  storageCapacity: 'storage_capacity',
+  operatingSystem: 'operating_system',
+  graphicsCard: 'graphics_card',
+  displaySize: 'display_size',
+  purchaseDate: 'purchase_date',
+  purchaseCost: 'purchase_cost',
+  vendor: 'vendor',
+  invoiceNumber: 'invoice_number',
+  warrantyStartDate: 'warranty_start_date',
+  warrantyEndDate: 'warranty_end_date',
+  location: 'location',
+  department: 'department',
+  description: 'description',
+  status: 'status',
+  assetImage: 'asset_image',
+  documents: 'documents',
+};
+
+const TEXT_FIELDS = new Set([
+  'name', 'assetType', 'category', 'assetCode', 'serialNumber', 'brand', 'model',
+  'processor', 'ram', 'storageType', 'storageCapacity', 'operatingSystem',
+  'graphicsCard', 'displaySize', 'vendor', 'invoiceNumber', 'location',
+  'department', 'description', 'status', 'assetImage',
+]);
+
+function buildRow(body) {
+  const row = {};
+  for (const [key, column] of Object.entries(ASSET_FIELD_MAP)) {
+    if (body[key] === undefined) continue;
+    let value = body[key];
+    if (TEXT_FIELDS.has(key) && typeof value === 'string') value = value.trim() || null;
+    if (key === 'purchaseCost') value = value === '' || value === null ? null : Number(value);
+    if (key === 'documents' && !Array.isArray(value)) value = [];
+    row[column] = value;
+  }
+  return row;
+}
+
 // GET /api/assets
 router.get('/', async (req, res) => {
   const { data, error } = await supabase
@@ -16,41 +67,50 @@ router.get('/', async (req, res) => {
   return res.json(data.map(toCamel));
 });
 
-// POST /api/assets  (admin/hr)
+// POST /api/assets  (admin/hr/it_support)
 router.post('/', requireRole('admin', 'hr', 'it_support'), async (req, res) => {
-  const { name, assetType, serialNumber, description, status, purchaseDate, location } = req.body;
+  const { name, assetType } = req.body;
   if (!name || !assetType) return res.status(400).json({ error: 'Name and asset type are required' });
 
-  const { data, error } = await supabase
-    .from('assets')
-    .insert({
-      name: name.trim(),
-      asset_type: assetType,
-      serial_number: serialNumber?.trim() || null,
-      description: description?.trim() || null,
-      status: status || 'Available',
-      purchase_date: purchaseDate || null,
-      location: location?.trim() || null,
-      created_by: req.user.id,
-    })
-    .select()
-    .single();
+  const row = buildRow(req.body);
+  row.status = row.status || 'Available';
+  row.created_by = req.user.id;
 
+  const { data, error } = await supabase.from('assets').insert(row).select().single();
   if (error) return res.status(500).json({ error: error.message });
+
+  // Optional: assign to an employee right away instead of a separate step.
+  const { assignedEmployeeId, assignedDate } = req.body;
+  if (assignedEmployeeId) {
+    const [assignResult] = await Promise.all([
+      supabase.from('employee_assets').insert({
+        asset_id: data.id,
+        employee_id: assignedEmployeeId,
+        asset_name: data.name,
+        assigned_date: assignedDate || new Date().toISOString().split('T')[0],
+        status: 'Assigned',
+        created_by: req.user.id,
+      }),
+      supabase.from('assets').update({ status: 'Assigned', updated_at: new Date().toISOString() }).eq('id', data.id),
+    ]);
+    if (!assignResult.error) {
+      data.status = 'Assigned';
+      await supabase.from('notifications').insert({
+        employee_id: assignedEmployeeId,
+        title: 'Asset Assigned',
+        message: `${data.name} has been assigned to you.`,
+        type: 'asset',
+        link: '/assets',
+      });
+    }
+  }
+
   return res.status(201).json(toCamel(data));
 });
 
 // PUT /api/assets/:id
 router.put('/:id', requireRole('admin', 'hr', 'it_support'), async (req, res) => {
-  const { name, assetType, serialNumber, description, status, purchaseDate, location } = req.body;
-  const updateData = { updated_at: new Date().toISOString() };
-  if (name !== undefined) updateData.name = name.trim();
-  if (assetType !== undefined) updateData.asset_type = assetType;
-  if (serialNumber !== undefined) updateData.serial_number = serialNumber;
-  if (description !== undefined) updateData.description = description;
-  if (status !== undefined) updateData.status = status;
-  if (purchaseDate !== undefined) updateData.purchase_date = purchaseDate;
-  if (location !== undefined) updateData.location = location;
+  const updateData = { ...buildRow(req.body), updated_at: new Date().toISOString() };
 
   const { data, error } = await supabase.from('assets').update(updateData).eq('id', req.params.id).select().single();
   if (error) return res.status(500).json({ error: error.message });

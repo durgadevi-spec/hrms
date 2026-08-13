@@ -1,18 +1,9 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 import { api } from '../lib/api';
 import { useAuth } from './AuthContext';
+import type { Asset, AssetTypeOption, AssetCategoryOption } from '../types';
 
-// ─── Types ──────────────────────────────────────────────────────────────────
-
-export interface Asset {
-  id: string;
-  name: string;
-  assetType: string;
-  serialNumber: string | null;
-  description: string | null;
-  status: 'available' | 'assigned' | 'damaged' | 'returned';
-  createdAt: string;
-}
+export type { Asset, AssetTypeOption, AssetCategoryOption };
 
 export interface AssetAssignment {
   id: string;
@@ -28,14 +19,21 @@ export interface AssetAssignment {
 interface AssetsContextType {
   assets: Asset[];
   assignments: AssetAssignment[];
+  assetTypes: AssetTypeOption[];
+  assetCategories: AssetCategoryOption[];
   isLoading: boolean;
   error: string | null;
   refresh: () => Promise<void>;
 
   // Asset CRUD
-  addAsset: (asset: Partial<Asset>) => Promise<void>;
+  addAsset: (asset: Partial<Asset> & { assignedEmployeeId?: string; assignedDate?: string }) => Promise<void>;
   updateAsset: (id: string, updates: Partial<Asset>) => Promise<void>;
   deleteAsset: (id: string) => Promise<void>;
+
+  // Dynamic type/category management — lets Admin/IT Support add new options
+  // straight from the Assets page instead of editing backend code.
+  addAssetType: (name: string) => Promise<AssetTypeOption>;
+  addAssetCategory: (name: string, hardwareProfile: 'computer' | 'mobile' | 'none') => Promise<AssetCategoryOption>;
 
   // Assignment actions
   assignAsset: (assetId: string, employeeId: string) => Promise<void>;
@@ -52,6 +50,8 @@ export function AssetsProvider({ children }: { children: ReactNode }) {
   const { isAuthenticated } = useAuth();
   const [assets, setAssets] = useState<Asset[]>([]);
   const [assignments, setAssignments] = useState<AssetAssignment[]>([]);
+  const [assetTypes, setAssetTypes] = useState<AssetTypeOption[]>([]);
+  const [assetCategories, setAssetCategories] = useState<AssetCategoryOption[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -59,6 +59,8 @@ export function AssetsProvider({ children }: { children: ReactNode }) {
     if (!localStorage.getItem('token')) {
       setAssets([]);
       setAssignments([]);
+      setAssetTypes([]);
+      setAssetCategories([]);
       setIsLoading(false);
       return;
     }
@@ -67,13 +69,17 @@ export function AssetsProvider({ children }: { children: ReactNode }) {
       setIsLoading(true);
       setError(null);
 
-      const [assetsData, assignmentsData] = await Promise.all([
+      const [assetsData, assignmentsData, typesData, categoriesData] = await Promise.all([
         api.get('/api/assets'),
         api.get('/api/assets/assignments/all'),
+        api.get('/api/asset-types').catch(() => []),
+        api.get('/api/asset-categories').catch(() => []),
       ]);
 
       setAssets(Array.isArray(assetsData) ? assetsData : []);
       setAssignments(Array.isArray(assignmentsData) ? assignmentsData : []);
+      setAssetTypes(Array.isArray(typesData) ? typesData : []);
+      setAssetCategories(Array.isArray(categoriesData) ? categoriesData : []);
     } catch (err) {
       console.error('Failed to fetch assets:', err);
       setError('Failed to load assets.');
@@ -107,6 +113,20 @@ export function AssetsProvider({ children }: { children: ReactNode }) {
     await fetchAll();
   };
 
+  // ── Dynamic type/category management ─────────────────────────────────────────
+
+  const addAssetType = async (name: string) => {
+    const created = await api.post('/api/asset-types', { name });
+    setAssetTypes(prev => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
+    return created as AssetTypeOption;
+  };
+
+  const addAssetCategory = async (name: string, hardwareProfile: 'computer' | 'mobile' | 'none') => {
+    const created = await api.post('/api/asset-categories', { name, hardwareProfile });
+    setAssetCategories(prev => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
+    return created as AssetCategoryOption;
+  };
+
   // ── Assignment actions ───────────────────────────────────────────────────────
 
   const assignAsset = async (assetId: string, employeeId: string) => {
@@ -126,15 +146,36 @@ export function AssetsProvider({ children }: { children: ReactNode }) {
       assignments
         .filter((a) => a.employeeId === employeeId && !a.returnedDate)
         .map((assignment) => ({
-          asset: assets.find((a) => a.id === assignment.assetId) || {
+          asset: assets.find((a) => a.id === assignment.assetId) || ({
             id: assignment.assetId,
             name: assignment.assetName,
-            assetType: 'other' as const,
+            assetType: 'other',
+            category: null,
+            assetCode: null,
             serialNumber: null,
+            brand: null,
+            model: null,
+            processor: null,
+            ram: null,
+            storageType: null,
+            storageCapacity: null,
+            operatingSystem: null,
+            graphicsCard: null,
+            displaySize: null,
+            purchaseDate: null,
+            purchaseCost: null,
+            vendor: null,
+            invoiceNumber: null,
+            warrantyStartDate: null,
+            warrantyEndDate: null,
+            location: null,
+            department: null,
             description: null,
-            status: 'assigned' as const,
+            status: 'assigned',
+            assetImage: null,
+            documents: [],
             createdAt: '',
-          },
+          } as Asset),
           assignment,
         })),
     [assignments, assets]
@@ -150,12 +191,16 @@ export function AssetsProvider({ children }: { children: ReactNode }) {
       value={{
         assets,
         assignments,
+        assetTypes,
+        assetCategories,
         isLoading,
         error,
         refresh: fetchAll,
         addAsset,
         updateAsset,
         deleteAsset,
+        addAssetType,
+        addAssetCategory,
         assignAsset,
         returnAsset,
         getEmployeeAssets,
