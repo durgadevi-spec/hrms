@@ -135,8 +135,113 @@ function AddOptionInline({ placeholder, onAdd, extra }: {
   );
 }
 
+function AddAssetTypeModal({ onClose }: { onClose: () => void }) {
+  const { addAssetType } = useAssets();
+  const [value, setValue] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSubmit = async () => {
+    if (!value.trim()) return;
+    setSaving(true);
+    setError('');
+    try {
+      await addAssetType(value.trim());
+      onClose();
+    } catch (e: any) {
+      setError(e.message || 'Failed to add asset type');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-md bg-white dark:bg-surface-900 rounded-2xl shadow-2xl animate-scale-in p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-bold text-secondary-900 dark:text-white">Add Asset Type</h2>
+          <button onClick={onClose} className="p-2 rounded-lg hover:bg-surface-100 dark:hover:bg-surface-800 text-secondary-400">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-secondary-700 dark:text-surface-300 mb-1.5">Type name</label>
+            <input value={value} onChange={e => setValue(e.target.value)} placeholder="e.g. Monitor, Printer, Dock" className="input-field" />
+          </div>
+          {error && <p className="text-xs text-error-600 bg-error-50 p-2 rounded">{error}</p>}
+          <div className="flex gap-3">
+            <button type="button" onClick={onClose} className="btn-secondary flex-1">Cancel</button>
+            <button type="button" disabled={saving || !value.trim()} onClick={handleSubmit} className="btn-primary flex-1 disabled:opacity-50">
+              {saving ? 'Saving...' : 'Add Type'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AddAssetCategoryModal({ onClose }: { onClose: () => void }) {
+  const { addAssetCategory } = useAssets();
+  const [name, setName] = useState('');
+  const [profile, setProfile] = useState<'computer' | 'mobile' | 'none'>('none');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSubmit = async () => {
+    if (!name.trim()) return;
+    setSaving(true);
+    setError('');
+    try {
+      await addAssetCategory(name.trim(), profile);
+      onClose();
+    } catch (e: any) {
+      setError(e.message || 'Failed to add asset category');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-md bg-white dark:bg-surface-900 rounded-2xl shadow-2xl animate-scale-in p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-bold text-secondary-900 dark:text-white">Add Asset Category</h2>
+          <button onClick={onClose} className="p-2 rounded-lg hover:bg-surface-100 dark:hover:bg-surface-800 text-secondary-400">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-secondary-700 dark:text-surface-300 mb-1.5">Category name</label>
+            <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Office Equipment, Furniture" className="input-field" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-secondary-700 dark:text-surface-300 mb-1.5">Hardware profile</label>
+            <select value={profile} onChange={e => setProfile(e.target.value as 'computer' | 'mobile' | 'none')} className="input-field">
+              <option value="none">No hardware specs</option>
+              <option value="computer">Computer / laptop specs</option>
+              <option value="mobile">Mobile / tablet specs</option>
+            </select>
+          </div>
+          {error && <p className="text-xs text-error-600 bg-error-50 p-2 rounded">{error}</p>}
+          <div className="flex gap-3">
+            <button type="button" onClick={onClose} className="btn-secondary flex-1">Cancel</button>
+            <button type="button" disabled={saving || !name.trim()} onClick={handleSubmit} className="btn-primary flex-1 disabled:opacity-50">
+              {saving ? 'Saving...' : 'Add Category'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AddAssetModal({ asset, cloneFrom, onClose }: { asset?: Asset; cloneFrom?: Asset; onClose: () => void }) {
-  const { addAsset, updateAsset, assetTypes, assetCategories, addAssetType, addAssetCategory } = useAssets();
+  const { addAsset, updateAsset, assetTypes, assetCategories } = useAssets();
   const source = asset || cloneFrom;
   const isClone = !asset && !!cloneFrom;
   const isEdit = !!asset;
@@ -177,7 +282,6 @@ function AddAssetModal({ asset, cloneFrom, onClose }: { asset?: Asset; cloneFrom
   const [departments, setDepartments] = useState<any[]>([]);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const docsInputRef = useRef<HTMLInputElement>(null);
-  const [newCategoryProfile, setNewCategoryProfile] = useState<'computer' | 'mobile' | 'none'>('none');
 
   useEffect(() => {
     api.get('/api/employees').then((d: any) => setEmployees(Array.isArray(d) ? d.filter((e: any) => String(e.status || '').toLowerCase() === 'active') : [])).catch(() => {});
@@ -301,33 +405,12 @@ function AddAssetModal({ asset, cloneFrom, onClose }: { asset?: Asset; cloneFrom
                   <option value="">Select category</option>
                   {assetCategories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
                 </select>
-                <AddOptionInline
-                  placeholder="New category name"
-                  onAdd={async (name) => {
-                    const created = await addAssetCategory(name, newCategoryProfile);
-                    set({ category: created.name });
-                  }}
-                  extra={
-                    <select value={newCategoryProfile} onChange={e => setNewCategoryProfile(e.target.value as any)} className="input-field py-1.5 text-sm">
-                      <option value="none">No hardware specs (e.g. furniture, cards)</option>
-                      <option value="computer">Computer specs (processor, RAM, storage...)</option>
-                      <option value="mobile">Mobile device specs (storage, OS, display)</option>
-                    </select>
-                  }
-                />
               </div>
               <div>
                 <label className={labelCls}>Asset Type</label>
                 <select value={formData.assetType} onChange={e => set({ assetType: e.target.value })} className={inputCls}>
                   {assetTypes.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
                 </select>
-                <AddOptionInline
-                  placeholder="New type name"
-                  onAdd={async (name) => {
-                    const created = await addAssetType(name);
-                    set({ assetType: created.name });
-                  }}
-                />
               </div>
               <div>
                 <label className={labelCls}>Brand / Manufacturer</label>
@@ -737,6 +820,8 @@ export default function Assets() {
   const [returnTarget, setReturnTarget] = useState<{ assignmentId: string; assetName: string } | null>(null);
   const [assignTarget, setAssignTarget] = useState<Asset | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showTypeModal, setShowTypeModal] = useState(false);
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [editTarget, setEditTarget] = useState<Asset | null>(null);
   const [cloneTarget, setCloneTarget] = useState<Asset | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Asset | null>(null);
@@ -810,10 +895,20 @@ export default function Assets() {
           <p className="text-secondary-600 dark:text-surface-400 mt-1">{canManageAssets ? 'Track and manage company assets' : 'Assets assigned to you'}</p>
         </div>
         {canManageAssets && (
-          <button onClick={() => setShowAddModal(true)} className="btn-primary">
-            <Plus className="w-4 h-4" />
-            Add Asset
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="button" onClick={() => setShowTypeModal(true)} className="btn-secondary">
+              <Plus className="w-4 h-4" />
+              Add Type
+            </button>
+            <button type="button" onClick={() => setShowCategoryModal(true)} className="btn-secondary">
+              <Plus className="w-4 h-4" />
+              Add Category
+            </button>
+            <button onClick={() => setShowAddModal(true)} className="btn-primary">
+              <Plus className="w-4 h-4" />
+              Add Asset
+            </button>
+          </div>
         )}
       </div>
 
@@ -1138,6 +1233,8 @@ export default function Assets() {
         </div>
       )}
 
+      {showTypeModal && <AddAssetTypeModal onClose={() => setShowTypeModal(false)} />}
+      {showCategoryModal && <AddAssetCategoryModal onClose={() => setShowCategoryModal(false)} />}
       {showAddModal && <AddAssetModal onClose={() => setShowAddModal(false)} />}
       {editTarget && <AddAssetModal asset={editTarget} onClose={() => setEditTarget(null)} />}
       {cloneTarget && <AddAssetModal cloneFrom={cloneTarget} onClose={() => setCloneTarget(null)} />}
