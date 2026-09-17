@@ -51,6 +51,13 @@ async function patch() {
 
       -- Attachments Table support
       -- The employee_attachments table already uses doc_type_enum, which now includes 'Visa Document'.
+
+      -- Reminder Log table updates for multiple WhatsApp recipients per bill
+      ALTER TABLE public.reminder_log ADD COLUMN IF NOT EXISTS recipient_number TEXT NOT NULL DEFAULT '';
+      ALTER TABLE public.reminder_log DROP CONSTRAINT IF EXISTS unique_bill_sent_on;
+      ALTER TABLE public.reminder_log DROP CONSTRAINT IF EXISTS unique_bill_recipient_sent_on;
+      ALTER TABLE public.reminder_log ADD CONSTRAINT unique_bill_recipient_sent_on 
+        UNIQUE (bill_id, recipient_number, sent_on);
     `);
 
     console.log('✅ Patch applied successfully');

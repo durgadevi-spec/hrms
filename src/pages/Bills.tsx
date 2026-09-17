@@ -30,6 +30,7 @@ interface Log {
   bill_name: string;
   amount: number;
   recipient_number: string;
+  sent_on: string;
   days_left: number;
   created_at: string;
 }
@@ -105,6 +106,19 @@ export default function Bills() {
       return;
     }
 
+    const rawNumbers = recipientNumber.split(',').map(n => n.trim()).filter(Boolean);
+    if (rawNumbers.length === 0) {
+      setErrorMsg('Please enter at least one valid recipient phone number');
+      return;
+    }
+
+    const phoneRegex = /^[0-9+]{7,15}$/;
+    const invalidNum = rawNumbers.find(num => !phoneRegex.test(num.replace(/\s+/g, '')));
+    if (invalidNum) {
+      setErrorMsg(`Invalid phone number format: "${invalidNum}". Include country code without '+' (e.g. 919876543210).`);
+      return;
+    }
+
     try {
       setIsSubmitting(true);
       setErrorMsg('');
@@ -113,7 +127,7 @@ export default function Bills() {
       formData.append('name', name.trim());
       formData.append('amount', amount);
       formData.append('due_date', dueDate);
-      formData.append('recipient_number', recipientNumber.trim());
+      formData.append('recipient_number', rawNumbers.join(', '));
 
       const token = localStorage.getItem('token');
       const res = await fetch('/api/bills', {
@@ -365,8 +379,14 @@ export default function Bills() {
                           <td className="px-4 py-3.5 text-secondary-600 dark:text-surface-300">
                             {formattedDate}
                           </td>
-                          <td className="px-4 py-3.5 font-mono text-xs text-secondary-600 dark:text-surface-300">
-                            {bill.recipient_number}
+                          <td className="px-4 py-3.5">
+                            <div className="flex flex-wrap gap-1 max-w-xs">
+                              {bill.recipient_number.split(',').map((num, idx) => (
+                                <span key={idx} className="font-mono text-[11px] px-2 py-0.5 rounded-md bg-surface-100 dark:bg-surface-800 text-secondary-700 dark:text-surface-300 border border-surface-200 dark:border-surface-700">
+                                  {num.trim()}
+                                </span>
+                              ))}
+                            </div>
                           </td>
                           <td className="px-4 py-3.5">
                             {bill.status === 'PAID' ? (
@@ -531,17 +551,19 @@ export default function Bills() {
 
               <div>
                 <label className="block text-xs font-semibold text-secondary-700 dark:text-surface-300 mb-1">
-                  Recipient WhatsApp Number *
+                  Recipient WhatsApp Numbers (comma-separated for multiple) *
                 </label>
                 <input
                   type="text"
                   required
-                  placeholder="e.g. 919876543210"
+                  placeholder="e.g. 919876543210, 919123456789"
                   value={recipientNumber}
                   onChange={e => setRecipientNumber(e.target.value)}
                   className="w-full px-3.5 py-2 text-sm bg-surface-50 dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded-xl text-secondary-900 dark:text-white focus:outline-none focus:border-primary-500"
                 />
-                <span className="text-[11px] text-secondary-500 mt-1 block">Include country code without '+' (e.g. 919876543210)</span>
+                <span className="text-[11px] text-secondary-500 mt-1 block">
+                  Separate multiple phone numbers with commas. Include country code without '+' (e.g. 919876543210, 919876543211)
+                </span>
               </div>
 
               <div className="flex justify-end gap-3 pt-4 border-t border-surface-200 dark:border-surface-800">

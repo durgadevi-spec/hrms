@@ -54,7 +54,7 @@ export async function runDailyReminderCheck() {
     for (const bill of bills || []) {
       const { daysLeft, todayStr, dueOnly } = calculateDaysLeft(bill.due_date);
       console.log(`\n👉 [Cron Diagnostic] Evaluating Bill ID: ${bill.id} ("${bill.name}")`);
-      console.log(`   - Recipient: ${bill.recipient_number}`);
+      console.log(`   - Recipient List: ${bill.recipient_number}`);
       console.log(`   - Due Date (DB): ${bill.due_date} -> Normalized: ${dueOnly}`);
       console.log(`   - Today Date (Asia/Kolkata): ${todayStr}`);
       console.log(`   - Computed Days Left: ${daysLeft}`);
@@ -65,56 +65,71 @@ export async function runDailyReminderCheck() {
         continue;
       }
 
-      // Check if ALREADY successfully sent today
-      console.log(`   - 🔍 Checking if reminder was already sent today (${todayStr})...`);
-      const { data: existingLog } = await supabase
-        .from('reminder_log')
-        .select('id')
-        .eq('bill_id', bill.id)
-        .eq('sent_on', todayStr)
-        .maybeSingle();
+      // Split comma-separated recipient numbers
+      const recipients = (bill.recipient_number || '')
+        .split(',')
+        .map(num => num.trim())
+        .filter(Boolean);
 
-      if (existingLog) {
-        console.log(`   - ⏭️ Already successfully sent today (Log ID: ${existingLog.id}). Skipping.`);
-        skippedCount++;
+      if (recipients.length === 0) {
+        console.log(`   - ⏭️ No valid recipient numbers found for bill ID ${bill.id}. Skipping.`);
         continue;
       }
 
-      // Attempt to send WhatsApp message FIRST
-      console.log(`   - 📲 Attempting WhatsApp send to ${bill.recipient_number}...`);
-      try {
-        const daysLeftLabel = getDaysLeftLabel(daysLeft);
-        const sendResult = await sendTemplateMessage({
-          recipientNumber: bill.recipient_number,
-          billName: bill.name,
-          amount: bill.amount,
-          daysLeftLabel
-        });
-
-        console.log(`   - 🚀 WhatsApp API Send Result:`, sendResult);
-
-        // ONLY record log AFTER confirmed successful send!
-        console.log(`   - 📝 Recording successful send in reminder_log...`);
-        const { data: logData, error: logErr } = await supabase
+      for (const rawRecipient of recipients) {
+        // Check if ALREADY successfully sent to this specific recipient today
+        console.log(`   - 🔍 Checking if reminder was already sent to ${rawRecipient} today (${todayStr})...`);
+        const { data: existingLog } = await supabase
           .from('reminder_log')
-          .insert({
-            bill_id: bill.id,
-            sent_on: todayStr,
-            days_left: daysLeft
-          })
-          .select()
-          .single();
+          .select('id')
+          .eq('bill_id', bill.id)
+          .eq('recipient_number', rawRecipient)
+          .eq('sent_on', todayStr)
+          .maybeSingle();
 
-        if (logErr) {
-          console.warn(`   - ⚠️ Note: Message sent but log record failed:`, logErr.message);
-        } else {
-          console.log(`   - ✅ Reminder log recorded (Log ID: ${logData.id}).`);
+        if (existingLog) {
+          console.log(`   - ⏭️ Already successfully sent to ${rawRecipient} today (Log ID: ${existingLog.id}). Skipping.`);
+          skippedCount++;
+          continue;
         }
 
-        sentCount++;
-      } catch (sendErr) {
-        console.error(`   - ❌ Failed to send WhatsApp message for bill ID ${bill.id}:`, sendErr.message);
-        console.error(`   - ⚠️ Log entry NOT created, so this bill can be retried on next check.`);
+        // Attempt to send WhatsApp message to this recipient
+        console.log(`   - 📲 Attempting WhatsApp send to ${rawRecipient}...`);
+        try {
+          const daysLeftLabel = getDaysLeftLabel(daysLeft);
+          const sendResult = await sendTemplateMessage({
+            recipientNumber: rawRecipient,
+            billName: bill.name,
+            amount: bill.amount,
+            daysLeftLabel
+          });
+
+          console.log(`   - 🚀 WhatsApp API Send Result for ${rawRecipient}:`, sendResult);
+
+          // ONLY record log AFTER confirmed successful send!
+          console.log(`   - 📝 Recording successful send to ${rawRecipient} in reminder_log...`);
+          const { data: logData, error: logErr } = await supabase
+            .from('reminder_log')
+            .insert({
+              bill_id: bill.id,
+              recipient_number: rawRecipient,
+              sent_on: todayStr,
+              days_left: daysLeft
+            })
+            .select()
+            .single();
+
+          if (logErr) {
+            console.warn(`   - ⚠️ Note: Message sent to ${rawRecipient} but log record failed:`, logErr.message);
+          } else {
+            console.log(`   - ✅ Reminder log recorded for ${rawRecipient} (Log ID: ${logData.id}).`);
+          }
+
+          sentCount++;
+        } catch (sendErr) {
+          console.error(`   - ❌ Failed to send WhatsApp message to ${rawRecipient} for bill ID ${bill.id}:`, sendErr.message);
+          console.error(`   - ⚠️ Log entry NOT created for ${rawRecipient}, so it can be retried on next check.`);
+        }
       }
     }
 

@@ -17,12 +17,13 @@ CREATE TABLE IF NOT EXISTS public.bills (
 -- Performance index for daily cron queries
 CREATE INDEX IF NOT EXISTS idx_bills_unpaid_due ON public.bills (status, due_date);
 
--- 2. Create reminder_log table (Idempotency tracking)
+-- 2. Create reminder_log table (Idempotency tracking per recipient)
 CREATE TABLE IF NOT EXISTS public.reminder_log (
     id SERIAL PRIMARY KEY,
     bill_id INTEGER REFERENCES public.bills(id) ON DELETE CASCADE,
+    recipient_number TEXT NOT NULL DEFAULT '',
     sent_on DATE NOT NULL,
     days_left INTEGER NOT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW(),
-    CONSTRAINT unique_bill_sent_on UNIQUE (bill_id, sent_on)
+    CONSTRAINT unique_bill_recipient_sent_on UNIQUE (bill_id, recipient_number, sent_on)
 );

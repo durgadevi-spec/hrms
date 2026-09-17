@@ -94,8 +94,14 @@ router.post('/', upload.single('invoice'), async (req, res) => {
   try {
     const { name, amount, due_date, recipient_number } = req.body;
 
-    if (!name || !amount || !due_date || !recipient_number) {
-      return res.status(400).json({ error: 'Bill name, amount, due date, and recipient phone number are required.' });
+    const cleanRecipients = recipient_number
+      .split(',')
+      .map(num => num.trim())
+      .filter(Boolean)
+      .join(', ');
+
+    if (!cleanRecipients) {
+      return res.status(400).json({ error: 'At least one valid recipient phone number is required.' });
     }
 
     let invoice_url = null;
@@ -109,7 +115,7 @@ router.post('/', upload.single('invoice'), async (req, res) => {
         name: name.trim(),
         amount: parseFloat(amount),
         due_date,
-        recipient_number: recipient_number.trim(),
+        recipient_number: cleanRecipients,
         status: 'UNPAID',
         invoice_url
       })
@@ -184,7 +190,7 @@ router.get('/logs', async (req, res) => {
       created_at: l.created_at,
       bill_name: l.bills?.name,
       amount: l.bills?.amount,
-      recipient_number: l.bills?.recipient_number
+      recipient_number: l.recipient_number || l.bills?.recipient_number
     }));
 
     return res.json({ logs: formattedLogs });
