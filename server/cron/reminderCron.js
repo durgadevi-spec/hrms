@@ -130,6 +130,9 @@ export async function runDailyReminderCheck() {
           console.error(`   - ❌ Failed to send WhatsApp message to ${rawRecipient} for bill ID ${bill.id}:`, sendErr.message);
           console.error(`   - ⚠️ Log entry NOT created for ${rawRecipient}, so it can be retried on next check.`);
         }
+
+        // Small delay (300ms) between group recipient sends to prevent API rate limits / throttling
+        await new Promise(resolve => setTimeout(resolve, 300));
       }
     }
 

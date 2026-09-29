@@ -69,8 +69,11 @@ export async function sendTemplateMessage({ recipientNumber, billName, amount, d
 
     const data = await res.json();
     if (!res.ok) {
-      console.error('WhatsApp API Error:', data);
-      throw new Error(data.error?.message || 'Failed to send WhatsApp template message');
+      const errObj = data.error || {};
+      const errCode = errObj.code;
+      const errMsg = errObj.message || 'Failed to send WhatsApp template message';
+      console.error(`❌ Meta WhatsApp API Error [Code ${errCode || 'N/A'}]:`, errObj);
+      throw new Error(`[Meta Error ${errCode || 'Unknown'}] ${errMsg}`);
     }
 
     console.log(`✅ WhatsApp reminder template (${templateName}, ${langCode}) sent to ${formattedNumber}`);
