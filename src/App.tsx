@@ -17,6 +17,7 @@ import Assets from './pages/Assets';
 import Bills from './pages/Bills';
 import Profile from './pages/Profile';
 import Settings from './pages/Settings';
+import LandingPage from './pages/LandingPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
@@ -54,6 +55,7 @@ function AppRoutes() {
 
   return (
     <Routes>
+      <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={isAuthenticated ? <Navigate to={homePath} replace /> : <Login />} />
       <Route path="/signup" element={isAuthenticated ? <Navigate to={homePath} replace /> : <Signup />} />
       <Route element={
@@ -73,7 +75,7 @@ function AppRoutes() {
         <Route path="/profile/:id" element={<Profile />} />
         <Route path="/settings" element={<Settings />} />
       </Route>
-      <Route path="*" element={<Navigate to={isAuthenticated ? homePath : '/login'} replace />} />
+      <Route path="*" element={<Navigate to={isAuthenticated ? homePath : '/'} replace />} />
     </Routes>
   );
 }

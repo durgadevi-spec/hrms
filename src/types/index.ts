@@ -176,6 +176,7 @@ export interface Asset {
   department: string | null;
   description: string | null;
   status: AssetStatus;
+  mobileNumber?: string | null;
   assetImage: string | null;
   documents: AssetDocument[];
   createdAt: string;

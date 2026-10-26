@@ -5,7 +5,7 @@ export class ApiError extends Error {
   }
 }
 
-async function fetchWithAuth(url: string, options: RequestInit = {}) {
+async function fetchWithAuth(url: string, options: RequestInit = {}, retryCount = 0): Promise<any> {
   const token = localStorage.getItem('token');
   const headers = new Headers(options.headers || {});
   
@@ -16,24 +16,39 @@ async function fetchWithAuth(url: string, options: RequestInit = {}) {
     headers.set('Content-Type', 'application/json');
   }
 
-  const response = await fetch(url, { ...options, headers });
-  
-  const isAuthEndpoint = url.includes('/api/auth/login') || 
-                         url.includes('/api/auth/check-email') || 
-                         url.includes('/api/auth/reset-password') || 
-                         url.includes('/api/auth/activate');
+  try {
+    const response = await fetch(url, { ...options, headers });
+    
+    const isAuthEndpoint = url.includes('/api/auth/login') || 
+                           url.includes('/api/auth/check-email') || 
+                           url.includes('/api/auth/reset-password') || 
+                           url.includes('/api/auth/activate');
 
-  if (response.status === 401 && !isAuthEndpoint) {
-    localStorage.removeItem('token');
-    window.dispatchEvent(new Event('auth-expired'));
+    if (response.status === 401 && !isAuthEndpoint) {
+      localStorage.removeItem('token');
+      window.dispatchEvent(new Event('auth-expired'));
+    }
+
+    // If server returned 500/502/503 during dev server reboot / proxy reconnect, retry with backoff
+    if ((response.status === 500 || response.status === 502 || response.status === 503) && retryCount < 2) {
+      await new Promise(r => setTimeout(r, 600 * (retryCount + 1)));
+      return fetchWithAuth(url, options, retryCount + 1);
+    }
+
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => ({}));
+      throw new ApiError(response.status, errorBody.error || response.statusText);
+    }
+
+    return response.json();
+  } catch (err: any) {
+    // If fetch failed completely due to connection reset or network error, retry with backoff
+    if (retryCount < 2 && (err.name === 'TypeError' || err.message?.includes('fetch') || err.message?.includes('network'))) {
+      await new Promise(r => setTimeout(r, 600 * (retryCount + 1)));
+      return fetchWithAuth(url, options, retryCount + 1);
+    }
+    throw err;
   }
-
-  if (!response.ok) {
-    const errorBody = await response.json().catch(() => ({}));
-    throw new ApiError(response.status, errorBody.error || response.statusText);
-  }
-
-  return response.json();
 }
 
 export const api = {

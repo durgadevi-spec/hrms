@@ -158,65 +158,74 @@ router.post('/reset-password', async (req, res) => {
 
 // POST /api/auth/login
 router.post('/login', async (req, res) => {
-  const { email, password } = req.body;
-  if (!email || !password) {
-    return res.status(400).json({ error: 'Email and password are required' });
+  try {
+    const { email, password } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required' });
+    }
+
+    const { data: access, error: accessErr } = await supabase
+      .from('employee_system_access')
+      .select('*')
+      .eq('login_email', email.toLowerCase().trim())
+      .maybeSingle();
+
+    if (accessErr || !access) {
+      return res.status(401).json({ error: 'Invalid email or password' });
+    }
+
+    if (access.account_status === 'Inactive') {
+      return res.status(403).json({ error: 'Account is deactivated. Contact admin.' });
+    }
+
+    const valid = await bcrypt.compare(password, access.password_hash);
+    if (!valid) {
+      return res.status(401).json({ error: 'Invalid email or password' });
+    }
+
+    const { data: emp, error: empErr } = await supabase
+      .from('employees')
+      .select('*')
+      .eq('id', access.employee_id)
+      .maybeSingle();
+
+    if (empErr || !emp) {
+      return res.status(404).json({ error: 'Employee record not found for this account' });
+    }
+
+    const { data: job } = await supabase
+      .from('employee_job_details')
+      .select('*, department:departments(*)')
+      .eq('employee_id', emp.id)
+      .maybeSingle();
+
+    // Update last login
+    await supabase
+      .from('employee_system_access')
+      .update({ last_login: new Date().toISOString() })
+      .eq('id', access.id);
+
+    const token = jwt.sign(
+      { id: emp.id, email: access.login_email, role: access.role },
+      process.env.JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    return res.json({
+      token,
+      employee: sanitizeEmployee({
+        ...emp,
+        ...job,
+        id: emp.id, // job.id (employee_job_details PK) must not overwrite the employee's real id
+        email: access.login_email,
+        role: access.role,
+        status: access.account_status
+      }),
+    });
+  } catch (err) {
+    console.error('Error in /api/auth/login:', err);
+    return res.status(500).json({ error: err.message || 'Internal server error', details: err.stack });
   }
-
-  const { data: access, error: accessErr } = await supabase
-    .from('employee_system_access')
-    .select('*')
-    .eq('login_email', email.toLowerCase().trim())
-    .maybeSingle();
-
-  if (accessErr || !access) {
-    return res.status(401).json({ error: 'Invalid email or password' });
-  }
-
-  if (access.account_status === 'Inactive') {
-    return res.status(403).json({ error: 'Account is deactivated. Contact admin.' });
-  }
-
-  const valid = await bcrypt.compare(password, access.password_hash);
-  if (!valid) {
-    return res.status(401).json({ error: 'Invalid email or password' });
-  }
-
-  const { data: emp } = await supabase
-    .from('employees')
-    .select('*')
-    .eq('id', access.employee_id)
-    .single();
-
-  const { data: job } = await supabase
-    .from('employee_job_details')
-    .select('*, department:departments(*)')
-    .eq('employee_id', emp.id)
-    .maybeSingle();
-
-  // Update last login
-  await supabase
-    .from('employee_system_access')
-    .update({ last_login: new Date().toISOString() })
-    .eq('id', access.id);
-
-  const token = jwt.sign(
-    { id: emp.id, email: access.login_email, role: access.role },
-    process.env.JWT_SECRET,
-    { expiresIn: '7d' }
-  );
-
-  return res.json({
-    token,
-    employee: sanitizeEmployee({
-      ...emp,
-      ...job,
-      id: emp.id, // job.id (employee_job_details PK) must not overwrite the employee's real id
-      email: access.login_email,
-      role: access.role,
-      status: access.account_status
-    }),
-  });
 });
 
 // POST /api/auth/signup

@@ -426,36 +426,104 @@ arrayCrudEndpoints.forEach(({ path, table }) => {
 
 // PUT /api/employees/:id/deactivate
 router.put('/:id/deactivate', requireRole('admin', 'hr'), async (req, res) => {
-  const { data, error } = await supabase
-    .from('employee_system_access')
-    .update({
-      account_status: 'Inactive',
-      updated_at: new Date().toISOString(),
-      updated_by: req.user.id,
-    })
-    .eq('employee_id', req.params.id)
-    .select()
-    .single();
+  const empId = req.params.id;
 
-  if (error) return res.status(500).json({ error: error.message });
-  return res.json(data);
+  let empRes = await supabase.from('employees').select('*').eq('id', empId).maybeSingle();
+  if (!empRes.data) {
+    empRes = await supabase.from('employees').select('*').eq('employee_id', empId).maybeSingle();
+  }
+
+  const targetEmpId = empRes.data ? empRes.data.id : empId;
+
+  const accessCheck = await supabase
+    .from('employee_system_access')
+    .select('id')
+    .eq('employee_id', targetEmpId)
+    .maybeSingle();
+
+  if (accessCheck.data) {
+    const { error } = await supabase
+      .from('employee_system_access')
+      .update({
+        account_status: 'Inactive',
+        updated_at: new Date().toISOString(),
+        updated_by: req.user.id,
+      })
+      .eq('employee_id', targetEmpId);
+    if (error) return res.status(500).json({ error: error.message });
+  } else if (empRes.data) {
+    const { error } = await supabase.from('employee_system_access').insert({
+      employee_id: targetEmpId,
+      login_email: empRes.data.official_email,
+      role: 'employee',
+      account_status: 'Inactive',
+      created_by: req.user.id
+    });
+    if (error) return res.status(500).json({ error: error.message });
+  }
+
+  const [jobRes, accessRes] = await Promise.all([
+    supabase.from('employee_job_details').select('*, department:departments(*)').eq('employee_id', targetEmpId).maybeSingle(),
+    supabase.from('employee_system_access').select('*').eq('employee_id', targetEmpId).maybeSingle()
+  ]);
+
+  if (!empRes.data) {
+    return res.json({ id: empId, status: 'Inactive', account_status: 'Inactive' });
+  }
+
+  const unified = buildUnifiedEmployee(empRes.data, jobRes.data, accessRes.data);
+  return res.json(sanitizeEmployee(unified));
 });
 
 // PUT /api/employees/:id/reactivate
 router.put('/:id/reactivate', requireRole('admin', 'hr'), async (req, res) => {
-  const { data, error } = await supabase
-    .from('employee_system_access')
-    .update({
-      account_status: 'Active',
-      updated_at: new Date().toISOString(),
-      updated_by: req.user.id,
-    })
-    .eq('employee_id', req.params.id)
-    .select()
-    .single();
+  const empId = req.params.id;
 
-  if (error) return res.status(500).json({ error: error.message });
-  return res.json(data);
+  let empRes = await supabase.from('employees').select('*').eq('id', empId).maybeSingle();
+  if (!empRes.data) {
+    empRes = await supabase.from('employees').select('*').eq('employee_id', empId).maybeSingle();
+  }
+
+  const targetEmpId = empRes.data ? empRes.data.id : empId;
+
+  const accessCheck = await supabase
+    .from('employee_system_access')
+    .select('id')
+    .eq('employee_id', targetEmpId)
+    .maybeSingle();
+
+  if (accessCheck.data) {
+    const { error } = await supabase
+      .from('employee_system_access')
+      .update({
+        account_status: 'Active',
+        updated_at: new Date().toISOString(),
+        updated_by: req.user.id,
+      })
+      .eq('employee_id', targetEmpId);
+    if (error) return res.status(500).json({ error: error.message });
+  } else if (empRes.data) {
+    const { error } = await supabase.from('employee_system_access').insert({
+      employee_id: targetEmpId,
+      login_email: empRes.data.official_email,
+      role: 'employee',
+      account_status: 'Active',
+      created_by: req.user.id
+    });
+    if (error) return res.status(500).json({ error: error.message });
+  }
+
+  const [jobRes, accessRes] = await Promise.all([
+    supabase.from('employee_job_details').select('*, department:departments(*)').eq('employee_id', targetEmpId).maybeSingle(),
+    supabase.from('employee_system_access').select('*').eq('employee_id', targetEmpId).maybeSingle()
+  ]);
+
+  if (!empRes.data) {
+    return res.json({ id: empId, status: 'Active', account_status: 'Active' });
+  }
+
+  const unified = buildUnifiedEmployee(empRes.data, jobRes.data, accessRes.data);
+  return res.json(sanitizeEmployee(unified));
 });
 
 export default router;

@@ -14,6 +14,8 @@ import { api } from '../lib/api';
 import { formatDate, cn } from '../utils/formatters';
 import { getIconComponent } from '../utils/iconMap';
 import type { AssetType } from '../types';
+import SuccessAnimationModal from '../components/common/SuccessAnimationModal';
+import NoDataAnimation from '../components/common/NoDataAnimation';
 
 // ─── Avatar ───────────────────────────────────────────────────────────────────
 function Avatar({ firstName, lastName, size = 'lg', color }: {
@@ -109,7 +111,11 @@ function AssignAssetModal({ employeeId, employeeName, onClose, onAssigned }: { e
               <button key={asset.id} onClick={() => { setSelectedId(asset.id); setError(''); }}
                 className={cn('w-full flex items-center gap-3 p-3 rounded-xl border-2 transition-all text-left', sel ? 'border-primary-500 bg-primary-50' : 'border-secondary-200 hover:border-secondary-300')}>
                 <div className={cn('w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0', typeStyle.color)}><Icon className="w-4 h-4" /></div>
-                <div className="flex-1 min-w-0"><p className="text-sm font-semibold text-secondary-900 truncate">{asset.name}</p>{asset.serialNumber && <p className="text-xs text-secondary-400">S/N: {asset.serialNumber}</p>}</div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-secondary-900 truncate">{asset.name}</p>
+                  {asset.serialNumber && <p className="text-xs text-secondary-400">S/N: {asset.serialNumber}</p>}
+                  {asset.mobileNumber && <p className="text-xs text-secondary-400">📱 {asset.mobileNumber}</p>}
+                </div>
                 {sel && <CheckCircle2 className="w-5 h-5 text-primary-500 flex-shrink-0" />}
               </button>
             );
@@ -227,6 +233,17 @@ export default function Profile() {
   const [showReactivate, setShowReactivate] = useState(false);
   const [showAssignAsset, setShowAssignAsset] = useState(false);
   const [returnTarget, setReturnTarget] = useState<{ assignmentId: string; assetName: string } | null>(null);
+  const [feedbackModal, setFeedbackModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    subtitle: string;
+    animationType: 'contract' | 'delete' | 'tick';
+  }>({
+    isOpen: false,
+    title: '',
+    subtitle: '',
+    animationType: 'tick',
+  });
 
   const fetchData = async () => {
     if (!id) return;
@@ -234,13 +251,13 @@ export default function Profile() {
       setIsLoading(true);
       const [emp, depts, emps, tsk, ts, lv, prj, asgn] = await Promise.all([
         api.get(`/api/employees/${id}`),
-        api.get('/api/departments'),
-        api.get('/api/employees'),
-        api.get(`/api/tasks?assignedTo=${id}`),
-        api.get('/api/timesheets'),
-        api.get('/api/leave-requests'),
-        api.get('/api/projects'),
-        api.get('/api/projects/assignments/all'),
+        api.get('/api/departments').catch(() => []),
+        api.get('/api/employees').catch(() => []),
+        api.get(`/api/tasks?assignedTo=${id}`).catch(() => []),
+        api.get('/api/timesheets').catch(() => []),
+        api.get('/api/leave-requests').catch(() => []),
+        api.get('/api/projects').catch(() => []),
+        api.get('/api/projects/assignments/all').catch(() => []),
       ]);
       // Normalize employee data: map emergencyContacts -> emergencyContact (for view)
       if (emp) {
@@ -296,19 +313,43 @@ export default function Profile() {
   const employeeAssets = getEmployeeAssets(employeeData.id);
   const managersList = allEmployees.filter(e => ['admin', 'manager', 'hr'].includes(e.role));
 
-  const isInactive = employeeData.status === 'inactive';
+  const isInactive = (employeeData.status || '').toLowerCase() === 'inactive';
 
   const handleSave = async (data: any) => {
     const updated = await api.put(`/api/employees/${employeeData.id}`, data);
     setEmployeeData(updated);
   };
   const handleDeactivate = async (reason: string) => {
-    try { const u = await api.put(`/api/employees/${employeeData.id}/deactivate`, { reason }); setEmployeeData(u); setShowDeactivate(false); }
-    catch (err: any) { alert(err.message); }
+    try {
+      const u = await api.put(`/api/employees/${employeeData.id}/deactivate`, { reason });
+      setEmployeeData((prev: any) => ({ ...prev, ...u, status: 'Inactive' }));
+      setShowDeactivate(false);
+      fetchData();
+      setFeedbackModal({
+        isOpen: true,
+        title: 'Account Deactivated',
+        subtitle: `${employeeData.firstName} ${employeeData.lastName}'s login access has been deactivated.`,
+        animationType: 'tick',
+      });
+    } catch (err: any) {
+      alert(err.message);
+    }
   };
   const handleReactivate = async () => {
-    try { const u = await api.put(`/api/employees/${employeeData.id}/reactivate`); setEmployeeData(u); setShowReactivate(false); }
-    catch (err: any) { alert(err.message); }
+    try {
+      const u = await api.put(`/api/employees/${employeeData.id}/reactivate`);
+      setEmployeeData((prev: any) => ({ ...prev, ...u, status: 'Active' }));
+      setShowReactivate(false);
+      fetchData();
+      setFeedbackModal({
+        isOpen: true,
+        title: 'Account Reactivated!',
+        subtitle: `${employeeData.firstName} ${employeeData.lastName}'s login access has been successfully restored.`,
+        animationType: 'tick',
+      });
+    } catch (err: any) {
+      alert(err.message);
+    }
   };
 
   const roleColors: Record<string, string> = {
@@ -322,7 +363,7 @@ export default function Profile() {
     on_leave: { badge: 'bg-warning-100 text-warning-700', dot: 'bg-warning-500' },
     inactive: { badge: 'bg-secondary-100 text-secondary-500', dot: 'bg-secondary-400' },
   };
-  const sc = statusColors[employeeData.status] || statusColors.inactive;
+  const sc = statusColors[(employeeData.status || '').toLowerCase()] || statusColors.inactive;
 
   const tabs = [
     { key: 'info' as const, label: 'Personal Info' },
@@ -404,7 +445,7 @@ export default function Profile() {
               <p className="text-sm text-secondary-500 mt-0.5">{employeeData.designation || '—'}</p>
               <div className="flex flex-wrap gap-1.5 mt-3">
                 <span className={cn('inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold', roleColors[employeeData.role] || roleColors.employee)}>{employeeData.role}</span>
-                <span className={cn('inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold', sc.badge)}>{employeeData.status.replace('_', ' ')}</span>
+                <span className={cn('inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold', sc.badge)}>{(employeeData.status || 'Active').replace('_', ' ')}</span>
                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-secondary-100 text-secondary-600 font-mono">{employeeData.employeeId}</span>
               </div>
               <div className="my-4 border-t border-secondary-100" />
@@ -603,9 +644,8 @@ export default function Profile() {
                     )}
                   </div>
                   {employeeAssets.length === 0 ? (
-                    <div className="py-6 text-center bg-secondary-50 rounded-xl border border-secondary-100">
-                      <Package className="w-7 h-7 mx-auto text-secondary-300 mb-2" />
-                      <p className="text-xs text-secondary-400">No assets assigned</p>
+                    <div className="py-4 flex justify-center bg-transparent">
+                      <NoDataAnimation size="sm" />
                     </div>
                   ) : (
                     <div className="grid grid-cols-2 gap-2.5">
@@ -620,6 +660,7 @@ export default function Profile() {
                             <div className="flex-1 min-w-0">
                               <p className="text-xs font-semibold text-secondary-900 truncate">{asset.name}</p>
                               {asset.serialNumber && <p className="text-[10px] text-secondary-400">S/N: {asset.serialNumber}</p>}
+                              {asset.mobileNumber && <p className="text-[10px] text-secondary-400">📱 {asset.mobileNumber}</p>}
                             </div>
                             {isAdmin && (
                               <button onClick={() => setReturnTarget({ assignmentId: assignment.id, assetName: asset.name })}
@@ -691,9 +732,8 @@ export default function Profile() {
                     <p className="text-sm font-bold text-secondary-800">Projects <span className="text-secondary-400 font-normal">({employeeProjects.length})</span></p>
                   </div>
                   {employeeProjects.length === 0 ? (
-                    <div className="py-8 text-center bg-secondary-50 rounded-xl border border-secondary-100">
-                      <Briefcase className="w-8 h-8 mx-auto text-secondary-200 mb-2" />
-                      <p className="text-xs text-secondary-400">No projects assigned</p>
+                    <div className="py-4 flex justify-center bg-transparent">
+                      <NoDataAnimation size="sm" />
                     </div>
                   ) : (
                     <div className="space-y-2.5">
@@ -722,9 +762,8 @@ export default function Profile() {
                     <p className="text-sm font-bold text-secondary-800">Tasks <span className="text-secondary-400 font-normal">({employeeTasks.length})</span></p>
                   </div>
                   {employeeTasks.length === 0 ? (
-                    <div className="py-8 text-center bg-secondary-50 rounded-xl border border-secondary-100">
-                      <CheckCircle2 className="w-8 h-8 mx-auto text-secondary-200 mb-2" />
-                      <p className="text-xs text-secondary-400">No tasks assigned</p>
+                    <div className="py-4 flex justify-center bg-transparent">
+                      <NoDataAnimation size="sm" />
                     </div>
                   ) : (
                     <div className="space-y-2">
@@ -864,6 +903,14 @@ export default function Profile() {
           </div>
         </div>
       )}
+
+      <SuccessAnimationModal
+        isOpen={feedbackModal.isOpen}
+        title={feedbackModal.title}
+        subtitle={feedbackModal.subtitle}
+        animationType={feedbackModal.animationType}
+        onClose={() => setFeedbackModal(prev => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 }

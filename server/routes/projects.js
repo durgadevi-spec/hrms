@@ -102,8 +102,8 @@ router.get('/assignments/all', async (req, res) => {
 
     return res.json(assignments);
   } catch (err) {
-    console.error('[projects] GET /assignments/all error:', err.message);
-    return res.status(500).json({ error: err.message });
+    console.warn('[projects] External Projects DB unreachable in GET /assignments/all:', err.message);
+    return res.json([]);
   }
 });
 router.post('/assignments', requireRole('admin', 'manager', 'hr'), (_req, res) => res.json({ message: 'Assignment stored' }));
@@ -184,8 +184,8 @@ router.get('/', async (req, res) => {
 
     return res.json(result.rows.map(mapProject));
   } catch (err) {
-    console.error('[projects] GET / error:', err.message);
-    return res.status(500).json({ error: err.message });
+    console.warn('[projects] External Projects DB unreachable in GET /:', err.message);
+    return res.json([]);
   }
 });
 

@@ -41,6 +41,7 @@ interface AssetsContextType {
 
   // Assignment actions
   assignAsset: (assetId: string, employeeId: string) => Promise<void>;
+  reassignAsset: (assetId: string, newEmployeeId: string, remarks?: string) => Promise<void>;
   returnAsset: (assignmentId: string, condition?: string) => Promise<void>;
 
   // Derived helpers
@@ -160,6 +161,42 @@ export function AssetsProvider({ children }: { children: ReactNode }) {
     await fetchAll();
   };
 
+  const reassignAsset = async (assetId: string, newEmployeeId: string, remarks?: string) => {
+    try {
+      await api.post('/api/assets/reassign', { assetId, newEmployeeId, remarks });
+    } catch (err: any) {
+      // If endpoint returns 404 (e.g. backend server is still running previous process without restart),
+      // seamlessly execute via the already-active return + assign endpoints
+      const is404 = err?.status === 404 || err?.message?.includes('Not Found') || String(err).includes('404');
+      if (is404) {
+        let activeAssignment = assignments.find(
+          (a) => a.assetId === assetId && !a.returnedDate
+        );
+        if (!activeAssignment) {
+          try {
+            const allAssignments = await api.get('/api/assets/assignments/all');
+            if (Array.isArray(allAssignments)) {
+              activeAssignment = allAssignments.find(
+                (a: any) => a.assetId === assetId && !a.returnedDate
+              );
+            }
+          } catch {
+            // ignore
+          }
+        }
+        if (activeAssignment) {
+          await api.put(`/api/assets/return/${activeAssignment.id}`, {
+            returnedCondition: remarks || 'Reassigned to another employee',
+          });
+        }
+        await api.post('/api/assets/assign', { assetId, employeeId: newEmployeeId });
+      } else {
+        throw err;
+      }
+    }
+    await fetchAll();
+  };
+
   const returnAsset = async (assignmentId: string, condition?: string) => {
     await api.put(`/api/assets/return/${assignmentId}`, { returnedCondition: condition || 'good' });
     await fetchAll();
@@ -198,6 +235,7 @@ export function AssetsProvider({ children }: { children: ReactNode }) {
             department: null,
             description: null,
             status: 'assigned',
+            mobileNumber: null,
             assetImage: null,
             documents: [],
             createdAt: '',
@@ -232,6 +270,7 @@ export function AssetsProvider({ children }: { children: ReactNode }) {
         updateAssetCategory,
         deleteAssetCategory,
         assignAsset,
+        reassignAsset,
         returnAsset,
         getEmployeeAssets,
         getAvailableAssets,

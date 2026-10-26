@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { Calendar, Check, X, Clock, Sun, Coffee, FileText, AlertCircle, Search, RefreshCw, Clock4, ShieldAlert, ChevronLeft, ChevronRight, User } from 'lucide-react';
 import { api } from '../lib/api';
 import { formatDate, cn } from '../utils/formatters';
+import NoDataAnimation from '../components/common/NoDataAnimation';
 
 function toLocalDateKey(dateInput: string | Date | null | undefined): string {
   if (!dateInput) return '';
@@ -409,9 +410,8 @@ export default function Leaves() {
               </div>
 
               {filteredHistory.length === 0 ? (
-                <div className="card p-12 text-center">
-                  <Calendar className="w-12 h-12 mx-auto text-secondary-300 dark:text-surface-600 mb-4" />
-                  <p className="text-secondary-600 dark:text-surface-400 font-medium">No leave records found.</p>
+                <div className="py-8 flex justify-center bg-transparent">
+                  <NoDataAnimation />
                 </div>
               ) : (
                 filteredHistory.map((leave, index) => {
@@ -505,9 +505,8 @@ export default function Leaves() {
               </div>
 
               {filteredPermissions.length === 0 ? (
-                <div className="card p-12 text-center">
-                  <Clock4 className="w-12 h-12 mx-auto text-secondary-300 dark:text-surface-600 mb-4" />
-                  <p className="text-secondary-600 dark:text-surface-400 font-medium">No permission records found.</p>
+                <div className="py-8 flex justify-center bg-transparent">
+                  <NoDataAnimation />
                 </div>
               ) : (
                 filteredPermissions.map((perm, index) => {

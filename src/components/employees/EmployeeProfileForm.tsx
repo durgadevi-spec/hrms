@@ -19,6 +19,7 @@ import EmergencyContactForm from './sections/EmergencyContactForm';
 import AttachmentsForm from './sections/AttachmentsForm';
 import AssetsForm from './sections/AssetsForm';
 import CertificationsForm from './sections/CertificationsForm';
+import SuccessAnimationModal from '../common/SuccessAnimationModal';
 import { Award } from 'lucide-react';
 
 interface EmployeeProfileFormProps {
@@ -117,6 +118,7 @@ export default function EmployeeProfileForm({ initialData, onClose, onSaved }: E
   const [saveStatus, setSaveStatus] = useState<'idle' | 'draft' | 'saved' | 'error'>('idle');
   const [createdEmpId, setCreatedEmpId] = useState<string | null>(null);
   const [failedSections, setFailedSections] = useState<string[]>([]);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
 
   // Calculate progress
   const progress = Math.round(((activeStep + 1) / sections.length) * 100);
@@ -496,9 +498,13 @@ export default function EmployeeProfileForm({ initialData, onClose, onSaved }: E
       // form open so the person can see the error and retry instead of
       // silently losing data.
       if (!isDraft && errors.length === 0) {
-        setTimeout(() => {
-          onSaved();
-        }, 1500);
+        if (!initialData) {
+          setShowSuccessModal(true);
+        } else {
+          setTimeout(() => {
+            onSaved();
+          }, 1200);
+        }
       }
     } catch (err: any) {
       console.error('[Save] Critical error (employee creation failed):', err);
@@ -672,6 +678,16 @@ export default function EmployeeProfileForm({ initialData, onClose, onSaved }: E
           </div>
         </div>
       </div>
+
+      <SuccessAnimationModal
+        isOpen={showSuccessModal}
+        title="Employee Added Successfully!"
+        subtitle={`${formData.personal.firstName || 'Employee'} has been registered into the workforce.`}
+        onClose={() => {
+          setShowSuccessModal(false);
+          onSaved();
+        }}
+      />
     </div>
   );
 }

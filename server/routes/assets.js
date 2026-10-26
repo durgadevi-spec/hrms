@@ -35,14 +35,17 @@ const ASSET_FIELD_MAP = {
   status: 'status',
   assetImage: 'asset_image',
   documents: 'documents',
+  mobileNumber: 'mobile_number',
 };
 
 const TEXT_FIELDS = new Set([
   'name', 'assetType', 'category', 'assetCode', 'serialNumber', 'brand', 'model',
   'processor', 'ram', 'storageType', 'storageCapacity', 'operatingSystem',
   'graphicsCard', 'displaySize', 'vendor', 'invoiceNumber', 'location',
-  'department', 'description', 'status', 'assetImage',
+  'department', 'description', 'status', 'assetImage', 'mobileNumber',
 ]);
+
+const DATE_FIELDS = new Set(['purchaseDate', 'warrantyStartDate', 'warrantyEndDate']);
 
 function buildRow(body) {
   const row = {};
@@ -50,6 +53,7 @@ function buildRow(body) {
     if (body[key] === undefined) continue;
     let value = body[key];
     if (TEXT_FIELDS.has(key) && typeof value === 'string') value = value.trim() || null;
+    if (DATE_FIELDS.has(key)) value = (typeof value === 'string' && value.trim()) ? value.trim() : null;
     if (key === 'purchaseCost') value = value === '' || value === null ? null : Number(value);
     if (key === 'documents' && !Array.isArray(value)) value = [];
     row[column] = value;
@@ -210,6 +214,59 @@ router.put('/return/:assignmentId', requireRole('admin', 'hr', 'it_support'), as
 
   if (returnResult.error) return res.status(500).json({ error: returnResult.error.message });
   return res.json(toCamel(returnResult.data));
+});
+
+// POST /api/assets/reassign (admin/hr/it_support)
+router.post('/reassign', requireRole('admin', 'hr', 'it_support'), async (req, res) => {
+  const { assetId, newEmployeeId, remarks } = req.body;
+  if (!assetId || !newEmployeeId) return res.status(400).json({ error: 'Asset and new employee are required' });
+
+  // 1. Check asset exists
+  const { data: asset, error: assetErr } = await supabase.from('assets').select('id, name').eq('id', assetId).single();
+  if (assetErr || !asset) return res.status(404).json({ error: 'Asset not found' });
+
+  // 2. Mark any current active assignment as Returned
+  const today = new Date().toISOString().split('T')[0];
+  await supabase
+    .from('employee_assets')
+    .update({
+      returned_date: today,
+      remarks: remarks || 'Reassigned to another employee',
+      status: 'Returned',
+      updated_at: new Date().toISOString(),
+    })
+    .eq('asset_id', assetId)
+    .is('returned_date', null);
+
+  // 3. Create new assignment
+  const { data: newAssignment, error: assignErr } = await supabase
+    .from('employee_assets')
+    .insert({
+      asset_id: assetId,
+      employee_id: newEmployeeId,
+      asset_name: asset.name,
+      assigned_date: today,
+      status: 'Assigned',
+      created_by: req.user.id,
+    })
+    .select('*')
+    .single();
+
+  if (assignErr) return res.status(500).json({ error: assignErr.message });
+
+  // 4. Ensure asset status is Assigned
+  await supabase.from('assets').update({ status: 'Assigned', updated_at: new Date().toISOString() }).eq('id', assetId);
+
+  // 5. Notify the new employee
+  await supabase.from('notifications').insert({
+    employee_id: newEmployeeId,
+    title: 'Asset Assigned',
+    message: `${asset.name} has been assigned to you.`,
+    type: 'asset',
+    link: '/assets',
+  });
+
+  return res.status(200).json(toCamel(newAssignment));
 });
 
 export default router;

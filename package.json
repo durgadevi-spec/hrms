@@ -4,9 +4,9 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "concurrently \"vite --port 5175\" \"node server/index.js\" --names \"vite,server\" --prefix-colors \"cyan,yellow\"",
+    "dev": "concurrently \"vite --port 5175\" \"node --watch server/index.js\" --names \"vite,server\" --prefix-colors \"cyan,yellow\"",
     "dev:client": "vite",
-    "dev:server": "node server/index.js",
+    "dev:server": "node --watch server/index.js",
     "migrate": "node server/migrate.js",
     "build": "vite build",
     "lint": "eslint .",
@@ -14,12 +14,17 @@
     "typecheck": "tsc --noEmit -p tsconfig.app.json"
   },
   "dependencies": {
+    "@lottiefiles/dotlottie-react": "^0.20.0",
+    "@radix-ui/react-slot": "^1.5.0",
     "@supabase/supabase-js": "^2.57.4",
     "bcryptjs": "^3.0.3",
     "body-parser": "^2.3.0",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
+    "framer-motion": "^14.5.0",
     "jsonwebtoken": "^9.0.3",
     "lucide-react": "^0.344.0",
     "multer": "^1.4.5-lts.1",
@@ -30,7 +35,8 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.22.0",
-    "recharts": "^3.8.1"
+    "recharts": "^3.8.1",
+    "tailwind-merge": "^3.7.0"
   },
   "serverDependencies": {
     "bcryptjs": "^2.4.3",

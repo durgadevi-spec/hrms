@@ -3,6 +3,7 @@ import { useDepartments } from '../context/DepartmentsContext';
 import { api } from '../lib/api';
 import { Crown, Users, Building2, LayoutGrid, List, X } from 'lucide-react';
 import { cn } from '../utils/formatters';
+import NoDataAnimation from '../components/common/NoDataAnimation';
 
 function ManagerDetailsModal({ manager, reports, managedDepts, departments, mode, onClose }: { manager: any; reports: any[]; managedDepts: any[]; departments: any[]; mode: 'departments' | 'reports'; onClose: () => void }) {
   return (
@@ -129,7 +130,11 @@ export default function Managers() {
         </div>
       </div>
 
-      {view === 'grid' ? (
+      {managers.length === 0 ? (
+        <div className="py-12 flex justify-center bg-transparent">
+          <NoDataAnimation />
+        </div>
+      ) : view === 'grid' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {managers.map(manager => {
             const managedDepts = getManagedDepartments(manager);

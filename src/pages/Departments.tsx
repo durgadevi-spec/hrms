@@ -4,6 +4,8 @@ import { Building2, Users, Search, Plus, Edit2, Trash2, X, LayoutGrid, List } fr
 import { api } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { cn } from '../utils/formatters';
+import SuccessAnimationModal from '../components/common/SuccessAnimationModal';
+import NoDataAnimation from '../components/common/NoDataAnimation';
 
 function DepartmentModal({ onClose, dept, isEdit }: { onClose: () => void; dept?: any; isEdit?: boolean }) {
   const { addDepartment, updateDepartment } = useDepartments();
@@ -157,6 +159,17 @@ export default function Departments() {
   const [selectedDept, setSelectedDept] = useState<any>(null);
   const [employees, setEmployees] = useState<any[]>([]);
   const [view, setView] = useState<'grid' | 'list'>('list');
+  const [successModalConfig, setSuccessModalConfig] = useState<{
+    isOpen: boolean;
+    title: string;
+    subtitle: string;
+    animationType?: 'contract' | 'delete' | 'tick';
+  }>({
+    isOpen: false,
+    title: '',
+    subtitle: '',
+    animationType: 'delete',
+  });
 
   useEffect(() => {
     api.get('/api/employees').then(setEmployees).catch(console.error);
@@ -165,9 +178,19 @@ export default function Departments() {
   const handleEdit = (dept: any) => { setEditingDept(dept); setShowModal(true); };
 
   const handleDelete = async (id: string) => {
+    const targetDept = departments.find(d => d.id === id);
     if (window.confirm('Are you sure you want to delete this department?')) {
-      try { await deleteDepartment(id); }
-      catch (err: any) { alert(err.message || 'Failed to delete department'); }
+      try {
+        await deleteDepartment(id);
+        setSuccessModalConfig({
+          isOpen: true,
+          title: 'Department Deleted',
+          subtitle: `"${targetDept?.name || 'Department'}" has been permanently deleted.`,
+          animationType: 'delete',
+        });
+      } catch (err: any) {
+        alert(err.message || 'Failed to delete department');
+      }
     }
   };
 
@@ -240,10 +263,8 @@ export default function Departments() {
 
       {/* Empty state */}
       {filteredDepartments.length === 0 && (
-        <div className="card p-12 text-center">
-          <Building2 className="w-12 h-12 mx-auto text-secondary-200 mb-3" />
-          <p className="text-secondary-400 font-medium">No departments found</p>
-          {search && <p className="text-sm text-secondary-400 mt-1">Try adjusting your search</p>}
+        <div className="py-12 flex justify-center bg-transparent">
+          <NoDataAnimation />
         </div>
       )}
 
@@ -395,6 +416,14 @@ export default function Departments() {
           onClose={() => setSelectedDept(null)}
         />
       )}
+
+      <SuccessAnimationModal
+        isOpen={successModalConfig.isOpen}
+        title={successModalConfig.title}
+        subtitle={successModalConfig.subtitle}
+        animationType={successModalConfig.animationType || 'delete'}
+        onClose={() => setSuccessModalConfig(prev => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 }

@@ -129,8 +129,15 @@ router.get('/', async (req, res) => {
     }));
 
   } catch (err) {
-    console.error('[timesheets] GET / error:', err.message);
-    return res.status(500).json({ error: err.message });
+    console.warn('[timesheets] External Timestrap DB unreachable:', err.message);
+    return res.json({
+      dailyPlans: [],
+      planTasks: [],
+      dailySubmissions: [],
+      timeEntries: [],
+      timesheetSubmissions: [],
+      employees: []
+    });
   }
 });
 

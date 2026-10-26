@@ -11,6 +11,7 @@ type SortField = 'firstName' | 'joiningDate' | 'status' | 'department';
 type SortDir = 'asc' | 'desc';
 
 import EmployeeProfileForm from '../components/employees/EmployeeProfileForm';
+import NoDataAnimation from '../components/common/NoDataAnimation';
 
 // ─── Employees Page ───────────────────────────────────────────────────────────
 
@@ -239,7 +240,9 @@ export default function Employees() {
             <tbody className="divide-y divide-surface-100 dark:divide-surface-800">
               {filteredEmployees.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-12 text-center text-secondary-400">No employees found</td>
+                  <td colSpan={6} className="py-12 text-center bg-transparent">
+                    <NoDataAnimation />
+                  </td>
                 </tr>
               ) : (
                 filteredEmployees.map((employee) => {

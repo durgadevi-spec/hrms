@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { Calendar, Clock, CheckCircle2, XCircle, FileText, ChevronLeft, ChevronRight, AlertCircle, Users, BarChart3, Search, CalendarDays, ShieldAlert, ArrowLeft } from 'lucide-react';
 import { api } from '../lib/api';
 import { formatDate, cn } from '../utils/formatters';
+import NoDataAnimation from '../components/common/NoDataAnimation';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
 // Helper to parse '1h 27m' into a float
@@ -382,7 +383,9 @@ function EmployeeDashboard({ data, leavesData, selectedDate, setSelectedDate }: 
               <h3 className="font-bold text-secondary-900 dark:text-white flex items-center gap-2"><CalendarDays className="w-4 h-4 text-primary-500" /> Daily Plan</h3>
             </div>
             {dailyPlanTasks.length === 0 ? (
-              <div className="p-6 text-center text-secondary-500 text-sm italic">No plan created for this day.</div>
+              <div className="py-6 flex justify-center bg-transparent">
+                <NoDataAnimation size="sm" />
+              </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm text-left">
@@ -416,7 +419,9 @@ function EmployeeDashboard({ data, leavesData, selectedDate, setSelectedDate }: 
               {dailySubmission && <span className="font-bold text-primary-600">{dailySubmission.totalHours} Logged</span>}
             </div>
             {dailyEntries.length === 0 ? (
-              <div className="p-6 text-center text-secondary-500 text-sm italic">No time entries logged.</div>
+              <div className="py-6 flex justify-center bg-transparent">
+                <NoDataAnimation size="sm" />
+              </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm text-left">

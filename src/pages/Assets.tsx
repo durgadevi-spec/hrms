@@ -6,12 +6,15 @@ import {
   Plus, Search, Package, Upload,
   UploadCloud, File as FileIcon, FileText, DollarSign, Building2, ShieldCheck,
   CheckCircle2, Users, X, RotateCcw, UserCheck, Trash2, Edit2, AlertTriangle,
-  LayoutGrid, List, SortAsc, SortDesc, Copy, Cpu, Image as ImageIcon
+  LayoutGrid, List, SortAsc, SortDesc, Copy, Cpu, Image as ImageIcon,
+  CreditCard, Smartphone, PhoneCall
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { formatDate, cn } from '../utils/formatters';
 import { getIconComponent } from '../utils/iconMap';
 import type { Asset, AssetDocument } from '../types';
+import SuccessAnimationModal from '../components/common/SuccessAnimationModal';
+import NoDataAnimation from '../components/common/NoDataAnimation';
 
 // Get type styling from database-backed asset types
 // Falls back to Package icon and secondary color if type not found
@@ -27,6 +30,63 @@ const getTypeStyle = (typeName: string, assetTypes: any[]) => {
     icon: Package,
     color: 'bg-secondary-100 text-secondary-600'
   };
+};
+
+export type AssetKind = 'card' | 'sim' | 'mobile' | 'computer' | 'general';
+
+export const getAssetKind = (type?: string, category?: string, hardwareProfile?: string): AssetKind => {
+  const t = (type || '').toLowerCase();
+  const c = (category || '').toLowerCase();
+  const p = (hardwareProfile || '').toLowerCase();
+
+  // 1. SIM Card
+  if (t.includes('sim') || c.includes('sim')) return 'sim';
+
+  // 2. ID / Access Card / RFID / Badge
+  if (
+    (t.includes('card') && !t.includes('sim')) ||
+    t.includes('access') ||
+    t.includes('badge') ||
+    t.includes('id card') ||
+    t === 'id' ||
+    (c.includes('card') && !c.includes('sim')) ||
+    c.includes('access')
+  ) {
+    return 'card';
+  }
+
+  // 3. Mobile / Smartphone / Tablet
+  if (
+    t.includes('mobile') ||
+    t.includes('phone') ||
+    t.includes('tablet') ||
+    t.includes('ipad') ||
+    c.includes('mobile') ||
+    p === 'mobile'
+  ) {
+    return 'mobile';
+  }
+
+  // 4. Computer / Laptop / Desktop / Mac / PC
+  if (
+    t.includes('laptop') ||
+    t.includes('desktop') ||
+    t.includes('computer') ||
+    t.includes('mac') ||
+    t.includes('pc') ||
+    c.includes('computer') ||
+    p === 'computer'
+  ) {
+    return 'computer';
+  }
+
+  return 'general';
+};
+
+export const isMobileOrSim = (type?: string) => {
+  if (!type) return false;
+  const t = type.trim().toLowerCase();
+  return t.includes('mobile') || t.includes('sim') || t.includes('phone');
 };
 
 const assetStatusConfig: Record<string, { color: string; label: string }> = {
@@ -72,7 +132,7 @@ function SectionHeading({ icon: Icon, title }: { icon: React.ElementType; title:
 
 // Small inline "add new" control used for both Type and Category selects, so
 // Admin/IT Support can grow either list without leaving the Add Asset form.
-function AddAssetTypeModal({ onClose }: { onClose: () => void }) {
+function AddAssetTypeModal({ onClose, onDeleted }: { onClose: () => void; onDeleted?: (name: string) => void }) {
   const { addAssetType, updateAssetType, deleteAssetType, assetTypes } = useAssets();
   const [value, setValue] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
@@ -112,8 +172,10 @@ function AddAssetTypeModal({ onClose }: { onClose: () => void }) {
 
   const handleDelete = async (id: string) => {
     try {
+      const target = assetTypes.find(t => t.id === id);
       await deleteAssetType(id);
       if (editingId === id) resetForm();
+      if (onDeleted && target) onDeleted(target.name);
     } catch (e: any) {
       setError(e.message || 'Failed to delete asset type');
     }
@@ -187,7 +249,7 @@ function AddAssetTypeModal({ onClose }: { onClose: () => void }) {
   );
 }
 
-function AddAssetCategoryModal({ onClose }: { onClose: () => void }) {
+function AddAssetCategoryModal({ onClose, onDeleted }: { onClose: () => void; onDeleted?: (name: string) => void }) {
   const { addAssetCategory, updateAssetCategory, deleteAssetCategory, assetCategories } = useAssets();
   const [name, setName] = useState('');
   const [profile, setProfile] = useState<'computer' | 'mobile' | 'none'>('none');
@@ -230,8 +292,10 @@ function AddAssetCategoryModal({ onClose }: { onClose: () => void }) {
 
   const handleDelete = async (id: string) => {
     try {
+      const target = assetCategories.find(c => c.id === id);
       await deleteAssetCategory(id);
       if (editingId === id) resetForm();
+      if (onDeleted && target) onDeleted(target.name);
     } catch (e: any) {
       setError(e.message || 'Failed to delete asset category');
     }
@@ -316,7 +380,7 @@ function AddAssetCategoryModal({ onClose }: { onClose: () => void }) {
   );
 }
 
-function AddAssetModal({ asset, cloneFrom, onClose }: { asset?: Asset; cloneFrom?: Asset; onClose: () => void }) {
+function AddAssetModal({ asset, cloneFrom, onClose, onCreated }: { asset?: Asset; cloneFrom?: Asset; onClose: () => void; onCreated?: (name: string, type: string) => void }) {
   const { addAsset, updateAsset, assetTypes, assetCategories } = useAssets();
   const source = asset || cloneFrom;
   const isClone = !asset && !!cloneFrom;
@@ -328,6 +392,7 @@ function AddAssetModal({ asset, cloneFrom, onClose }: { asset?: Asset; cloneFrom
     category: (source as any)?.category || '',
     assetCode: asset ? ((source as any)?.assetCode || '') : '', // don't clone a code — each physical item needs its own
     serialNumber: asset ? (asset?.serialNumber || '') : '', // never carry over a serial number when cloning
+    mobileNumber: (source as any)?.mobileNumber || '',
     brand: (source as any)?.brand || '',
     model: (source as any)?.model || '',
     processor: (source as any)?.processor || '',
@@ -366,6 +431,46 @@ function AddAssetModal({ asset, cloneFrom, onClose }: { asset?: Asset; cloneFrom
 
   const selectedCategory = assetCategories.find(c => c.name === formData.category);
   const hardwareProfile = selectedCategory?.hardwareProfile || 'none';
+  const assetKind: AssetKind = useMemo(() => {
+    return getAssetKind(formData.assetType, formData.category, hardwareProfile);
+  }, [formData.assetType, formData.category, hardwareProfile]);
+
+  const handleTypeChange = (newType: string) => {
+    // Automatically match to the most appropriate category if not set or incompatible
+    const matchingCat = assetCategories.find(c => {
+      const cName = c.name.toLowerCase();
+      const tName = newType.toLowerCase();
+      if ((tName.includes('card') && !tName.includes('sim')) && (cName.includes('card') || cName.includes('access'))) return true;
+      if (tName.includes('sim') && cName.includes('sim')) return true;
+      if ((tName.includes('mobile') || tName.includes('phone')) && cName.includes('mobile')) return true;
+      if ((tName.includes('laptop') || tName.includes('desktop') || tName.includes('mac')) && cName.includes('computer')) return true;
+      return false;
+    });
+
+    setFormData(prev => ({
+      ...prev,
+      assetType: newType,
+      category: prev.category || (matchingCat ? matchingCat.name : prev.category)
+    }));
+  };
+
+  const handleCategoryChange = (newCategory: string) => {
+    const matchingType = assetTypes.find(t => {
+      const cName = newCategory.toLowerCase();
+      const tName = t.name.toLowerCase();
+      if ((cName.includes('card') || cName.includes('access')) && tName.includes('card') && !tName.includes('sim')) return true;
+      if (cName.includes('sim') && tName.includes('sim')) return true;
+      if (cName.includes('mobile') && tName.includes('mobile')) return true;
+      if (cName.includes('computer') && (tName.includes('laptop') || tName.includes('desktop'))) return true;
+      return false;
+    });
+
+    setFormData(prev => ({
+      ...prev,
+      category: newCategory,
+      assetType: prev.assetType || (matchingType ? matchingType.name : prev.assetType)
+    }));
+  };
 
   const set = (patch: Partial<typeof formData>) => setFormData(prev => ({ ...prev, ...patch }));
 
@@ -404,11 +509,31 @@ function AddAssetModal({ asset, cloneFrom, onClose }: { asset?: Asset; cloneFrom
         ...formData,
         status: (formData.status || 'available').charAt(0).toUpperCase() + (formData.status || 'available').slice(1).toLowerCase(),
         purchaseCost: formData.purchaseCost === '' ? null : Number(formData.purchaseCost),
+        purchaseDate: (typeof formData.purchaseDate === 'string' && formData.purchaseDate.trim()) ? formData.purchaseDate.trim() : null,
+        warrantyStartDate: (typeof formData.warrantyStartDate === 'string' && formData.warrantyStartDate.trim()) ? formData.warrantyStartDate.trim() : null,
+        warrantyEndDate: (typeof formData.warrantyEndDate === 'string' && formData.warrantyEndDate.trim()) ? formData.warrantyEndDate.trim() : null,
       };
-      // Hardware fields that don't apply to the selected category are cleared
-      // rather than silently saved, so switching category later doesn't leave
-      // stale specs behind.
-      if (hardwareProfile === 'none') {
+
+      // Clean redundant fields according to the selected asset format
+      if (assetKind === 'card') {
+        Object.assign(payload, {
+          processor: null, ram: null, storageType: null, storageCapacity: null,
+          operatingSystem: null, graphicsCard: null, displaySize: null,
+          brand: null, vendor: null, invoiceNumber: null, purchaseCost: null,
+          warrantyStartDate: null, warrantyEndDate: null, mobileNumber: null,
+        });
+      } else if (assetKind === 'sim') {
+        Object.assign(payload, {
+          processor: null, ram: null, storageType: null, storageCapacity: null,
+          operatingSystem: null, graphicsCard: null, displaySize: null,
+          vendor: null, invoiceNumber: null, purchaseCost: null,
+          warrantyStartDate: null, warrantyEndDate: null,
+        });
+      } else if (assetKind === 'mobile') {
+        Object.assign(payload, {
+          graphicsCard: null, storageType: 'Internal',
+        });
+      } else if (hardwareProfile === 'none') {
         Object.assign(payload, {
           processor: '', ram: '', storageType: '', storageCapacity: '',
           operatingSystem: '', graphicsCard: '', displaySize: '',
@@ -416,16 +541,27 @@ function AddAssetModal({ asset, cloneFrom, onClose }: { asset?: Asset; cloneFrom
       } else if (hardwareProfile === 'mobile') {
         Object.assign(payload, { processor: '', graphicsCard: '', storageType: '' });
       }
+
       if (!formData.assignedEmployeeId) {
         delete payload.assignedEmployeeId;
         delete payload.assignedDate;
       }
+      if (assetKind !== 'sim' && assetKind !== 'mobile' && !isMobileOrSim(formData.assetType)) {
+        payload.mobileNumber = null;
+      } else {
+        payload.mobileNumber = formData.mobileNumber?.trim() || null;
+      }
       if (asset) {
         await updateAsset(asset.id, payload);
+        onClose();
       } else {
         await addAsset(payload);
+        if (onCreated) {
+          onCreated(formData.name, formData.assetType);
+        } else {
+          onClose();
+        }
       }
-      onClose();
     } catch (err: any) {
       setError(err.message || 'Failed to save asset');
     } finally {
@@ -460,171 +596,691 @@ function AddAssetModal({ asset, cloneFrom, onClose }: { asset?: Asset; cloneFrom
           <div className="p-6 space-y-3 overflow-y-auto">
             {error && <p className="text-sm text-error-600 bg-error-50 p-3 rounded-lg">{error}</p>}
 
-            {/* ── Basic Info ─────────────────────────────────────────────── */}
-            <SectionHeading icon={Package} title="Basic Information" />
-            <div className="grid grid-cols-2 gap-4">
-              <div className="col-span-2">
-                <label className={labelCls}>Asset Name *</label>
-                <input required value={formData.name} onChange={e => set({ name: e.target.value })} className={inputCls} placeholder="MacBook Pro M2" />
-              </div>
-              <div>
-                <label className={labelCls}>Asset ID / Code</label>
-                <input value={formData.assetCode} onChange={e => set({ assetCode: e.target.value })} className={inputCls} placeholder="e.g. AST-0042" />
-              </div>
-              <div>
-                <label className={labelCls}>Serial Number</label>
-                <input value={formData.serialNumber} onChange={e => set({ serialNumber: e.target.value })} className={inputCls} placeholder="e.g. C02XABCDXYZ" />
-              </div>
-              <div>
-                <label className={labelCls}>Category</label>
-                <select value={formData.category} onChange={e => set({ category: e.target.value })} className={inputCls}>
-                  <option value="">Select category</option>
-                  {assetCategories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className={labelCls}>Asset Type</label>
-                <select value={formData.assetType} onChange={e => set({ assetType: e.target.value })} className={inputCls}>
-                  {assetTypes.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className={labelCls}>Brand / Manufacturer</label>
-                <input value={formData.brand} onChange={e => set({ brand: e.target.value })} className={inputCls} placeholder="e.g. Apple, Dell, Samsung" />
-              </div>
-              <div>
-                <label className={labelCls}>Model</label>
-                <input value={formData.model} onChange={e => set({ model: e.target.value })} className={inputCls} placeholder="e.g. MacBook Pro 14&quot; M2" />
-              </div>
-            </div>
+            {/* Format Indicator Banner */}
+            {(() => {
+              const bannerConfig = {
+                card: {
+                  icon: CreditCard,
+                  title: 'ID & Access Card Format',
+                  desc: 'Simplified form for company ID cards, RFID door badges, and facility passes.',
+                  cls: 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800/50 text-amber-800 dark:text-amber-300',
+                  iconCls: 'text-amber-600 dark:text-amber-400',
+                },
+                sim: {
+                  icon: PhoneCall,
+                  title: 'SIM Card Format',
+                  desc: 'Cellular tracking for mobile numbers, telecom operators, ICCID serials, and monthly plans.',
+                  cls: 'bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800/50 text-blue-800 dark:text-blue-300',
+                  iconCls: 'text-blue-600 dark:text-blue-400',
+                },
+                mobile: {
+                  icon: Smartphone,
+                  title: 'Mobile & Tablet Format',
+                  desc: 'Smartphone hardware profile with IMEI, operating system, internal storage, and SIM linking.',
+                  cls: 'bg-purple-50 dark:bg-purple-950/30 border-purple-200 dark:border-purple-800/50 text-purple-800 dark:text-purple-300',
+                  iconCls: 'text-purple-600 dark:text-purple-400',
+                },
+                computer: {
+                  icon: Cpu,
+                  title: 'Computer & Laptop Format',
+                  desc: 'Full enterprise hardware specifications (Processor, RAM, SSD/HDD, GPU, Warranty & Invoices).',
+                  cls: 'bg-indigo-50 dark:bg-indigo-950/30 border-indigo-200 dark:border-indigo-800/50 text-indigo-800 dark:text-indigo-300',
+                  iconCls: 'text-indigo-600 dark:text-indigo-400',
+                },
+                general: {
+                  icon: Package,
+                  title: 'General Equipment Format',
+                  desc: 'Office facilities, furniture, networking equipment, and general workplace assets.',
+                  cls: 'bg-surface-100 dark:bg-surface-800 border-surface-200 dark:border-surface-700 text-secondary-700 dark:text-surface-300',
+                  iconCls: 'text-secondary-500',
+                },
+              }[assetKind];
 
-            {/* ── Hardware Specs — dynamic based on Category ────────────────── */}
-            {hardwareProfile !== 'none' && (
-              <>
-                <SectionHeading icon={Cpu} title="Hardware Specifications" />
-                <div className="grid grid-cols-2 gap-4">
-                  {hardwareProfile === 'computer' && (
-                    <div>
-                      <label className={labelCls}>Processor</label>
-                      <input value={formData.processor} onChange={e => set({ processor: e.target.value })} className={inputCls} placeholder="e.g. Apple M2 Pro" />
-                    </div>
-                  )}
+              const BannerIcon = bannerConfig.icon;
+              return (
+                <div className={cn("flex items-center gap-3 px-4 py-2.5 rounded-xl border text-xs", bannerConfig.cls)}>
+                  <BannerIcon className={cn("w-4 h-4 shrink-0", bannerConfig.iconCls)} />
                   <div>
-                    <label className={labelCls}>RAM</label>
-                    <input value={formData.ram} onChange={e => set({ ram: e.target.value })} className={inputCls} placeholder="e.g. 16 GB" />
+                    <p className="font-semibold">{bannerConfig.title}</p>
+                    <p className="text-[11px] opacity-80">{bannerConfig.desc}</p>
                   </div>
-                  {hardwareProfile === 'computer' && (
-                    <div>
-                      <label className={labelCls}>Storage Type</label>
-                      <select value={formData.storageType} onChange={e => set({ storageType: e.target.value })} className={inputCls}>
-                        <option value="">Select</option>
-                        <option value="SSD">SSD</option>
-                        <option value="HDD">HDD</option>
-                        <option value="SSD + HDD">SSD + HDD</option>
-                      </select>
-                    </div>
+                </div>
+              );
+            })()}
+
+            {/* ── FORMAT 1: ID CARD & ACCESS CARD ─────────────────────────── */}
+            {assetKind === 'card' && (
+              <>
+                <SectionHeading icon={CreditCard} title="Card & Access Information" />
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="col-span-2 sm:col-span-1">
+                    <label className={labelCls}>Card / Badge Name *</label>
+                    <input
+                      required
+                      value={formData.name}
+                      onChange={e => set({ name: e.target.value })}
+                      className={inputCls}
+                      placeholder="e.g. Employee ID Card, RFID Access Card"
+                    />
+                  </div>
+                  <div className="col-span-2 sm:col-span-1">
+                    <label className={labelCls}>Card / Badge / RFID No. *</label>
+                    <input
+                      required
+                      value={formData.serialNumber}
+                      onChange={e => set({ serialNumber: e.target.value, assetCode: formData.assetCode || e.target.value })}
+                      className={inputCls}
+                      placeholder="e.g. CARD-0042 / RFID-9912"
+                    />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Asset Type</label>
+                    <select value={formData.assetType} onChange={e => handleTypeChange(e.target.value)} className={inputCls}>
+                      {assetTypes.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className={labelCls}>Category</label>
+                    <select value={formData.category} onChange={e => handleCategoryChange(e.target.value)} className={inputCls}>
+                      <option value="">Select category</option>
+                      {assetCategories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                    </select>
+                  </div>
+                  <div className="col-span-2">
+                    <label className={labelCls}>Access Level / Permissions (Optional)</label>
+                    <input
+                      value={formData.model}
+                      onChange={e => set({ model: e.target.value })}
+                      className={inputCls}
+                      placeholder="e.g. Main Entrance, 2nd Floor, Server Room 24/7"
+                    />
+                  </div>
+                </div>
+
+                {/* Card Assignment & Custody */}
+                <SectionHeading icon={Building2} title="Card Assignment & Custody" />
+                <div className="grid grid-cols-2 gap-4">
+                  {!isEdit && (
+                    <>
+                      <div>
+                        <label className={labelCls}>Assigned Employee</label>
+                        <select value={formData.assignedEmployeeId} onChange={e => set({ assignedEmployeeId: e.target.value })} className={inputCls}>
+                          <option value="">Not issued yet (Available in stock)</option>
+                          {employees.map((emp: any) => (
+                            <option key={emp.id} value={emp.id}>{emp.firstName} {emp.lastName} · {emp.employeeId}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className={labelCls}>Issue Date</label>
+                        <input
+                          type="date"
+                          value={formData.assignedDate}
+                          onChange={e => set({ assignedDate: e.target.value })}
+                          disabled={!formData.assignedEmployeeId}
+                          className={cn(inputCls, !formData.assignedEmployeeId && 'opacity-50')}
+                        />
+                      </div>
+                    </>
                   )}
                   <div>
-                    <label className={labelCls}>Storage Capacity</label>
-                    <input value={formData.storageCapacity} onChange={e => set({ storageCapacity: e.target.value })} className={inputCls} placeholder="e.g. 512 GB" />
+                    <label className={labelCls}>Department</label>
+                    <select value={formData.department} onChange={e => set({ department: e.target.value })} className={inputCls}>
+                      <option value="">Select department</option>
+                      {departments.map((d: any) => <option key={d.id} value={d.name}>{d.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className={labelCls}>Location</label>
+                    <input value={formData.location} onChange={e => set({ location: e.target.value })} className={inputCls} placeholder="e.g. Head Office" />
+                  </div>
+                  <div className="col-span-2">
+                    <label className={labelCls}>Card Status</label>
+                    <select value={formData.status} onChange={e => set({ status: e.target.value })} className={inputCls}>
+                      {ASSET_STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Notes */}
+                <SectionHeading icon={FileText} title="Notes & Clearance Instructions" />
+                <textarea
+                  value={formData.description}
+                  onChange={e => set({ description: e.target.value })}
+                  className="input-field resize-none h-16"
+                  placeholder="e.g. Physical badge issued. Surrender required upon employee resignation / exit."
+                />
+              </>
+            )}
+
+            {/* ── FORMAT 2: SIM CARD ────────────────────────────────────────── */}
+            {assetKind === 'sim' && (
+              <>
+                <SectionHeading icon={PhoneCall} title="SIM Card & Cellular Details" />
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="col-span-2 sm:col-span-1">
+                    <label className={labelCls}>Mobile / Phone Number *</label>
+                    <input
+                      required
+                      type="tel"
+                      value={formData.mobileNumber}
+                      onChange={e => {
+                        const num = e.target.value;
+                        set({
+                          mobileNumber: num,
+                          name: formData.name && !formData.name.startsWith('SIM - ') ? formData.name : `SIM - ${num}`
+                        });
+                      }}
+                      className={inputCls}
+                      placeholder="e.g. 9876543210"
+                    />
+                  </div>
+                  <div className="col-span-2 sm:col-span-1">
+                    <label className={labelCls}>Network Operator / Carrier *</label>
+                    <input
+                      list="telecom-operators"
+                      required
+                      value={formData.brand}
+                      onChange={e => set({ brand: e.target.value })}
+                      className={inputCls}
+                      placeholder="e.g. Airtel, Jio, Vi, BSNL"
+                    />
+                    <datalist id="telecom-operators">
+                      <option value="Airtel" />
+                      <option value="Jio" />
+                      <option value="Vodafone Idea (Vi)" />
+                      <option value="BSNL" />
+                    </datalist>
+                  </div>
+                  <div className="col-span-2 sm:col-span-1">
+                    <label className={labelCls}>SIM Card Name *</label>
+                    <input
+                      required
+                      value={formData.name}
+                      onChange={e => set({ name: e.target.value })}
+                      className={inputCls}
+                      placeholder="e.g. Corporate Airtel SIM"
+                    />
+                  </div>
+                  <div className="col-span-2 sm:col-span-1">
+                    <label className={labelCls}>SIM Serial / ICCID (19-20 Digits)</label>
+                    <input
+                      value={formData.serialNumber}
+                      onChange={e => set({ serialNumber: e.target.value })}
+                      className={inputCls}
+                      placeholder="e.g. 899100092384729104"
+                    />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Asset Type</label>
+                    <select value={formData.assetType} onChange={e => handleTypeChange(e.target.value)} className={inputCls}>
+                      {assetTypes.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className={labelCls}>Category</label>
+                    <select value={formData.category} onChange={e => handleCategoryChange(e.target.value)} className={inputCls}>
+                      <option value="">Select category</option>
+                      {assetCategories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                    </select>
+                  </div>
+                  <div className="col-span-2">
+                    <label className={labelCls}>Plan Details / Monthly Rental (Optional)</label>
+                    <input
+                      value={formData.model}
+                      onChange={e => set({ model: e.target.value })}
+                      className={inputCls}
+                      placeholder="e.g. Corporate Postpaid ₹499/mo, 2GB/day Unlimited"
+                    />
+                  </div>
+                </div>
+
+                {/* SIM Assignment & Department */}
+                <SectionHeading icon={Building2} title="SIM Assignment & Custody" />
+                <div className="grid grid-cols-2 gap-4">
+                  {!isEdit && (
+                    <>
+                      <div>
+                        <label className={labelCls}>Assigned Employee</label>
+                        <select value={formData.assignedEmployeeId} onChange={e => set({ assignedEmployeeId: e.target.value })} className={inputCls}>
+                          <option value="">Not issued yet (Available in stock)</option>
+                          {employees.map((emp: any) => (
+                            <option key={emp.id} value={emp.id}>{emp.firstName} {emp.lastName} · {emp.employeeId}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className={labelCls}>Issue Date</label>
+                        <input
+                          type="date"
+                          value={formData.assignedDate}
+                          onChange={e => set({ assignedDate: e.target.value })}
+                          disabled={!formData.assignedEmployeeId}
+                          className={cn(inputCls, !formData.assignedEmployeeId && 'opacity-50')}
+                        />
+                      </div>
+                    </>
+                  )}
+                  <div>
+                    <label className={labelCls}>Department</label>
+                    <select value={formData.department} onChange={e => set({ department: e.target.value })} className={inputCls}>
+                      <option value="">Select department</option>
+                      {departments.map((d: any) => <option key={d.id} value={d.name}>{d.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className={labelCls}>SIM Status</label>
+                    <select value={formData.status} onChange={e => set({ status: e.target.value })} className={inputCls}>
+                      {ASSET_STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Notes */}
+                <SectionHeading icon={FileText} title="Notes & PUK Details" />
+                <textarea
+                  value={formData.description}
+                  onChange={e => set({ description: e.target.value })}
+                  className="input-field resize-none h-16"
+                  placeholder="e.g. Assigned to sales executive. Return to IT upon resignation."
+                />
+              </>
+            )}
+
+            {/* ── FORMAT 3: MOBILE & TABLET ─────────────────────────────────── */}
+            {assetKind === 'mobile' && (
+              <>
+                <SectionHeading icon={Smartphone} title="Mobile Device Information" />
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="col-span-2 sm:col-span-1">
+                    <label className={labelCls}>Device Name *</label>
+                    <input
+                      required
+                      value={formData.name}
+                      onChange={e => set({ name: e.target.value })}
+                      className={inputCls}
+                      placeholder="e.g. Samsung Galaxy S23, iPhone 14"
+                    />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Brand / Manufacturer</label>
+                    <input
+                      value={formData.brand}
+                      onChange={e => set({ brand: e.target.value })}
+                      className={inputCls}
+                      placeholder="e.g. Apple, Samsung, Google"
+                    />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Model / Variant</label>
+                    <input
+                      value={formData.model}
+                      onChange={e => set({ model: e.target.value })}
+                      className={inputCls}
+                      placeholder="e.g. Galaxy S23 128GB"
+                    />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Serial Number / IMEI 1 *</label>
+                    <input
+                      required
+                      value={formData.serialNumber}
+                      onChange={e => set({ serialNumber: e.target.value })}
+                      className={inputCls}
+                      placeholder="e.g. 354892019283741"
+                    />
+                  </div>
+                  <div>
+                    <label className={labelCls}>IMEI 2 (Optional)</label>
+                    <input
+                      value={formData.processor}
+                      onChange={e => set({ processor: e.target.value })}
+                      className={inputCls}
+                      placeholder="e.g. 354892019283742"
+                    />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Linked Phone Number / SIM (Optional)</label>
+                    <input
+                      type="tel"
+                      value={formData.mobileNumber}
+                      onChange={e => set({ mobileNumber: e.target.value })}
+                      className={inputCls}
+                      placeholder="e.g. 9876543210"
+                    />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Asset Type</label>
+                    <select value={formData.assetType} onChange={e => handleTypeChange(e.target.value)} className={inputCls}>
+                      {assetTypes.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className={labelCls}>Category</label>
+                    <select value={formData.category} onChange={e => handleCategoryChange(e.target.value)} className={inputCls}>
+                      <option value="">Select category</option>
+                      {assetCategories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                    </select>
                   </div>
                   <div>
                     <label className={labelCls}>Operating System</label>
-                    <input value={formData.operatingSystem} onChange={e => set({ operatingSystem: e.target.value })} className={inputCls} placeholder="e.g. macOS Sonoma, Windows 11" />
+                    <input
+                      value={formData.operatingSystem}
+                      onChange={e => set({ operatingSystem: e.target.value })}
+                      className={inputCls}
+                      placeholder="e.g. Android 14, iOS 17"
+                    />
                   </div>
-                  {hardwareProfile === 'computer' && (
-                    <div>
-                      <label className={labelCls}>Graphics Card</label>
-                      <input value={formData.graphicsCard} onChange={e => set({ graphicsCard: e.target.value })} className={inputCls} placeholder="e.g. Apple M2 Pro 16-core GPU" />
-                    </div>
+                  <div>
+                    <label className={labelCls}>Internal Storage & RAM</label>
+                    <input
+                      value={formData.storageCapacity}
+                      onChange={e => set({ storageCapacity: e.target.value })}
+                      className={inputCls}
+                      placeholder="e.g. 128 GB Storage / 8 GB RAM"
+                    />
+                  </div>
+                </div>
+
+                {/* Purchase & Warranty */}
+                <SectionHeading icon={DollarSign} title="Purchase & Warranty" />
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className={labelCls}>Purchase Date</label>
+                    <input type="date" value={formData.purchaseDate} onChange={e => set({ purchaseDate: e.target.value })} className={inputCls} />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Purchase Cost</label>
+                    <input type="number" step="0.01" min="0" value={formData.purchaseCost} onChange={e => set({ purchaseCost: e.target.value })} className={inputCls} placeholder="e.g. 35000" />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Vendor</label>
+                    <input value={formData.vendor} onChange={e => set({ vendor: e.target.value })} className={inputCls} placeholder="e.g. Amazon, Reliance Digital" />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Warranty End Date</label>
+                    <input type="date" value={formData.warrantyEndDate} onChange={e => set({ warrantyEndDate: e.target.value })} className={inputCls} />
+                  </div>
+                </div>
+
+                {/* Assignment & Location */}
+                <SectionHeading icon={Building2} title="Assignment & Custody" />
+                <div className="grid grid-cols-2 gap-4">
+                  {!isEdit && (
+                    <>
+                      <div>
+                        <label className={labelCls}>Assigned Employee</label>
+                        <select value={formData.assignedEmployeeId} onChange={e => set({ assignedEmployeeId: e.target.value })} className={inputCls}>
+                          <option value="">Not issued yet (Available)</option>
+                          {employees.map((emp: any) => (
+                            <option key={emp.id} value={emp.id}>{emp.firstName} {emp.lastName} · {emp.employeeId}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className={labelCls}>Issue Date</label>
+                        <input
+                          type="date"
+                          value={formData.assignedDate}
+                          onChange={e => set({ assignedDate: e.target.value })}
+                          disabled={!formData.assignedEmployeeId}
+                          className={cn(inputCls, !formData.assignedEmployeeId && 'opacity-50')}
+                        />
+                      </div>
+                    </>
                   )}
                   <div>
-                    <label className={labelCls}>Display Size</label>
-                    <input value={formData.displaySize} onChange={e => set({ displaySize: e.target.value })} className={inputCls} placeholder="e.g. 14 inch" />
+                    <label className={labelCls}>Department</label>
+                    <select value={formData.department} onChange={e => set({ department: e.target.value })} className={inputCls}>
+                      <option value="">Select department</option>
+                      {departments.map((d: any) => <option key={d.id} value={d.name}>{d.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className={labelCls}>Device Status</label>
+                    <select value={formData.status} onChange={e => set({ status: e.target.value })} className={inputCls}>
+                      {ASSET_STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
                   </div>
                 </div>
               </>
             )}
 
-            {/* ── Purchase & Vendor ──────────────────────────────────────────── */}
-            <SectionHeading icon={DollarSign} title="Purchase & Vendor" />
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className={labelCls}>Purchase Date</label>
-                <input type="date" value={formData.purchaseDate} onChange={e => set({ purchaseDate: e.target.value })} className={inputCls} />
-              </div>
-              <div>
-                <label className={labelCls}>Purchase Cost</label>
-                <input type="number" step="0.01" min="0" value={formData.purchaseCost} onChange={e => set({ purchaseCost: e.target.value })} className={inputCls} placeholder="e.g. 1499.00" />
-              </div>
-              <div>
-                <label className={labelCls}>Vendor</label>
-                <input value={formData.vendor} onChange={e => set({ vendor: e.target.value })} className={inputCls} placeholder="e.g. Amazon Business" />
-              </div>
-              <div>
-                <label className={labelCls}>Invoice Number</label>
-                <input value={formData.invoiceNumber} onChange={e => set({ invoiceNumber: e.target.value })} className={inputCls} placeholder="e.g. INV-2026-0042" />
-              </div>
-            </div>
-
-            {/* ── Warranty ───────────────────────────────────────────────────── */}
-            <SectionHeading icon={ShieldCheck} title="Warranty" />
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className={labelCls}>Warranty Start Date</label>
-                <input type="date" value={formData.warrantyStartDate} onChange={e => set({ warrantyStartDate: e.target.value })} className={inputCls} />
-              </div>
-              <div>
-                <label className={labelCls}>Warranty End Date</label>
-                <input type="date" value={formData.warrantyEndDate} onChange={e => set({ warrantyEndDate: e.target.value })} className={inputCls} />
-              </div>
-            </div>
-
-            {/* ── Assignment & Location ──────────────────────────────────────── */}
-            <SectionHeading icon={Building2} title="Assignment & Location" />
-            <div className="grid grid-cols-2 gap-4">
-              {!isEdit && (
-                <>
+            {/* ── FORMAT 4: COMPUTER / LAPTOP / DESKTOP / MAC ───────────────── */}
+            {assetKind === 'computer' && (
+              <>
+                <SectionHeading icon={Package} title="Computer & Hardware Information" />
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="col-span-2">
+                    <label className={labelCls}>Asset Name *</label>
+                    <input required value={formData.name} onChange={e => set({ name: e.target.value })} className={inputCls} placeholder="e.g. MacBook Pro M2, ThinkPad T14" />
+                  </div>
                   <div>
-                    <label className={labelCls}>Assigned Employee</label>
-                    <select value={formData.assignedEmployeeId} onChange={e => set({ assignedEmployeeId: e.target.value })} className={inputCls}>
-                      <option value="">Not assigned yet</option>
-                      {employees.map((emp: any) => (
-                        <option key={emp.id} value={emp.id}>{emp.firstName} {emp.lastName} · {emp.employeeId}</option>
-                      ))}
+                    <label className={labelCls}>Asset ID / Code</label>
+                    <input value={formData.assetCode} onChange={e => set({ assetCode: e.target.value })} className={inputCls} placeholder="e.g. AST-0042" />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Serial Number *</label>
+                    <input required value={formData.serialNumber} onChange={e => set({ serialNumber: e.target.value })} className={inputCls} placeholder="e.g. C02XABCDXYZ" />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Asset Type</label>
+                    <select value={formData.assetType} onChange={e => handleTypeChange(e.target.value)} className={inputCls}>
+                      {assetTypes.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className={labelCls}>Assigned Date</label>
-                    <input type="date" value={formData.assignedDate} onChange={e => set({ assignedDate: e.target.value })} disabled={!formData.assignedEmployeeId} className={cn(inputCls, !formData.assignedEmployeeId && 'opacity-50')} />
+                    <label className={labelCls}>Category</label>
+                    <select value={formData.category} onChange={e => handleCategoryChange(e.target.value)} className={inputCls}>
+                      <option value="">Select category</option>
+                      {assetCategories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                    </select>
                   </div>
-                </>
-              )}
-              <div>
-                <label className={labelCls}>Department</label>
-                <select value={formData.department} onChange={e => set({ department: e.target.value })} className={inputCls}>
-                  <option value="">Select department</option>
-                  {departments.map((d: any) => <option key={d.id} value={d.name}>{d.name}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className={labelCls}>Location</label>
-                <input value={formData.location} onChange={e => set({ location: e.target.value })} className={inputCls} placeholder="e.g. Head Office" />
-              </div>
-              <div className="col-span-2">
-                <label className={labelCls}>Asset Status</label>
-                <select value={formData.status} onChange={e => set({ status: e.target.value })} className={inputCls}>
-                  {ASSET_STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-              </div>
-            </div>
+                  <div>
+                    <label className={labelCls}>Brand / Manufacturer</label>
+                    <input value={formData.brand} onChange={e => set({ brand: e.target.value })} className={inputCls} placeholder="e.g. Apple, Dell, Lenovo" />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Model</label>
+                    <input value={formData.model} onChange={e => set({ model: e.target.value })} className={inputCls} placeholder="e.g. MacBook Pro 14&quot; M2" />
+                  </div>
+                </div>
 
-            {/* ── Description ────────────────────────────────────────────────── */}
-            <SectionHeading icon={FileText} title="Description" />
-            <textarea value={formData.description} onChange={e => set({ description: e.target.value })} className="input-field resize-none h-16" placeholder="Details about the asset..." />
+                {/* Hardware Specifications */}
+                <SectionHeading icon={Cpu} title="Hardware Specifications" />
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className={labelCls}>Processor</label>
+                    <input value={formData.processor} onChange={e => set({ processor: e.target.value })} className={inputCls} placeholder="e.g. Apple M2 Pro, Intel Core i7" />
+                  </div>
+                  <div>
+                    <label className={labelCls}>RAM</label>
+                    <input value={formData.ram} onChange={e => set({ ram: e.target.value })} className={inputCls} placeholder="e.g. 16 GB, 32 GB" />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Storage Type</label>
+                    <select value={formData.storageType} onChange={e => set({ storageType: e.target.value })} className={inputCls}>
+                      <option value="">Select</option>
+                      <option value="SSD">NVMe / PCIe SSD</option>
+                      <option value="HDD">HDD</option>
+                      <option value="SSD + HDD">SSD + HDD</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className={labelCls}>Storage Capacity</label>
+                    <input value={formData.storageCapacity} onChange={e => set({ storageCapacity: e.target.value })} className={inputCls} placeholder="e.g. 512 GB, 1 TB" />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Operating System</label>
+                    <input value={formData.operatingSystem} onChange={e => set({ operatingSystem: e.target.value })} className={inputCls} placeholder="e.g. macOS Sonoma, Windows 11 Pro" />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Graphics Card</label>
+                    <input value={formData.graphicsCard} onChange={e => set({ graphicsCard: e.target.value })} className={inputCls} placeholder="e.g. Intel Iris Xe, Apple 16-Core GPU" />
+                  </div>
+                  <div className="col-span-2">
+                    <label className={labelCls}>Display Size</label>
+                    <input value={formData.displaySize} onChange={e => set({ displaySize: e.target.value })} className={inputCls} placeholder="e.g. 14 inch, 15.6 inch, 27 inch" />
+                  </div>
+                </div>
 
-            {/* ── Image & Documents ──────────────────────────────────────────── */}
-            <SectionHeading icon={ImageIcon} title="Asset Image & Documents" />
+                {/* Purchase & Vendor */}
+                <SectionHeading icon={DollarSign} title="Purchase & Vendor" />
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className={labelCls}>Purchase Date</label>
+                    <input type="date" value={formData.purchaseDate} onChange={e => set({ purchaseDate: e.target.value })} className={inputCls} />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Purchase Cost</label>
+                    <input type="number" step="0.01" min="0" value={formData.purchaseCost} onChange={e => set({ purchaseCost: e.target.value })} className={inputCls} placeholder="e.g. 85000.00" />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Vendor</label>
+                    <input value={formData.vendor} onChange={e => set({ vendor: e.target.value })} className={inputCls} placeholder="e.g. Dell Direct, Amazon Business" />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Invoice Number</label>
+                    <input value={formData.invoiceNumber} onChange={e => set({ invoiceNumber: e.target.value })} className={inputCls} placeholder="e.g. INV-2026-0042" />
+                  </div>
+                </div>
+
+                {/* Warranty */}
+                <SectionHeading icon={ShieldCheck} title="Warranty" />
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className={labelCls}>Warranty Start Date</label>
+                    <input type="date" value={formData.warrantyStartDate} onChange={e => set({ warrantyStartDate: e.target.value })} className={inputCls} />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Warranty End Date</label>
+                    <input type="date" value={formData.warrantyEndDate} onChange={e => set({ warrantyEndDate: e.target.value })} className={inputCls} />
+                  </div>
+                </div>
+
+                {/* Assignment & Location */}
+                <SectionHeading icon={Building2} title="Assignment & Location" />
+                <div className="grid grid-cols-2 gap-4">
+                  {!isEdit && (
+                    <>
+                      <div>
+                        <label className={labelCls}>Assigned Employee</label>
+                        <select value={formData.assignedEmployeeId} onChange={e => set({ assignedEmployeeId: e.target.value })} className={inputCls}>
+                          <option value="">Not assigned yet</option>
+                          {employees.map((emp: any) => (
+                            <option key={emp.id} value={emp.id}>{emp.firstName} {emp.lastName} · {emp.employeeId}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className={labelCls}>Assigned Date</label>
+                        <input type="date" value={formData.assignedDate} onChange={e => set({ assignedDate: e.target.value })} disabled={!formData.assignedEmployeeId} className={cn(inputCls, !formData.assignedEmployeeId && 'opacity-50')} />
+                      </div>
+                    </>
+                  )}
+                  <div>
+                    <label className={labelCls}>Department</label>
+                    <select value={formData.department} onChange={e => set({ department: e.target.value })} className={inputCls}>
+                      <option value="">Select department</option>
+                      {departments.map((d: any) => <option key={d.id} value={d.name}>{d.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className={labelCls}>Location</label>
+                    <input value={formData.location} onChange={e => set({ location: e.target.value })} className={inputCls} placeholder="e.g. Head Office" />
+                  </div>
+                  <div className="col-span-2">
+                    <label className={labelCls}>Asset Status</label>
+                    <select value={formData.status} onChange={e => set({ status: e.target.value })} className={inputCls}>
+                      {ASSET_STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* ── FORMAT 5: GENERAL EQUIPMENT / FURNITURE ───────────────────── */}
+            {assetKind === 'general' && (
+              <>
+                <SectionHeading icon={Package} title="Equipment Information" />
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="col-span-2">
+                    <label className={labelCls}>Asset Name *</label>
+                    <input required value={formData.name} onChange={e => set({ name: e.target.value })} className={inputCls} placeholder="e.g. Ergonomic Office Chair, Meeting Room TV" />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Asset ID / Code</label>
+                    <input value={formData.assetCode} onChange={e => set({ assetCode: e.target.value })} className={inputCls} placeholder="e.g. AST-0042" />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Serial Number (Optional)</label>
+                    <input value={formData.serialNumber} onChange={e => set({ serialNumber: e.target.value })} className={inputCls} placeholder="e.g. SN-098234" />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Asset Type</label>
+                    <select value={formData.assetType} onChange={e => handleTypeChange(e.target.value)} className={inputCls}>
+                      {assetTypes.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className={labelCls}>Category</label>
+                    <select value={formData.category} onChange={e => handleCategoryChange(e.target.value)} className={inputCls}>
+                      <option value="">Select category</option>
+                      {assetCategories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className={labelCls}>Brand / Manufacturer</label>
+                    <input value={formData.brand} onChange={e => set({ brand: e.target.value })} className={inputCls} placeholder="e.g. Featherlite, Cisco" />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Model / Specs</label>
+                    <input value={formData.model} onChange={e => set({ model: e.target.value })} className={inputCls} placeholder="e.g. High-back Mesh Chair" />
+                  </div>
+                </div>
+
+                {/* Purchase & Location */}
+                <SectionHeading icon={DollarSign} title="Purchase & Location" />
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className={labelCls}>Purchase Date</label>
+                    <input type="date" value={formData.purchaseDate} onChange={e => set({ purchaseDate: e.target.value })} className={inputCls} />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Purchase Cost</label>
+                    <input type="number" step="0.01" min="0" value={formData.purchaseCost} onChange={e => set({ purchaseCost: e.target.value })} className={inputCls} placeholder="e.g. 12000" />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Department</label>
+                    <select value={formData.department} onChange={e => set({ department: e.target.value })} className={inputCls}>
+                      <option value="">Select department</option>
+                      {departments.map((d: any) => <option key={d.id} value={d.name}>{d.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className={labelCls}>Location</label>
+                    <input value={formData.location} onChange={e => set({ location: e.target.value })} className={inputCls} placeholder="e.g. 3rd Floor Conference Room" />
+                  </div>
+                  <div className="col-span-2">
+                    <label className={labelCls}>Asset Status</label>
+                    <select value={formData.status} onChange={e => set({ status: e.target.value })} className={inputCls}>
+                      {ASSET_STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* Description (Common) */}
+            {assetKind !== 'card' && assetKind !== 'sim' && (
+              <>
+                <SectionHeading icon={FileText} title="Description" />
+                <textarea value={formData.description} onChange={e => set({ description: e.target.value })} className="input-field resize-none h-16" placeholder="Details about the asset..." />
+              </>
+            )}
+
+            {/* Asset Image & Documents (Available for All, Optional for Cards/SIMs) */}
+            <SectionHeading icon={ImageIcon} title={assetKind === 'card' ? 'Card Photo (Optional)' : assetKind === 'sim' ? 'SIM Photo (Optional)' : 'Asset Image & Documents'} />
             <div className="flex items-center gap-4 pb-2">
               <div className="w-16 h-16 rounded-xl border border-surface-200 dark:border-surface-700 bg-surface-50 dark:bg-surface-800 overflow-hidden shrink-0 flex items-center justify-center">
                 {formData.assetImage ? (
@@ -644,26 +1300,28 @@ function AddAssetModal({ asset, cloneFrom, onClose }: { asset?: Asset; cloneFrom
               </div>
             </div>
 
-            <div>
-              <input type="file" multiple className="hidden" ref={docsInputRef} onChange={handleDocsUpload} />
-              <button type="button" onClick={() => docsInputRef.current?.click()} className="w-full flex items-center justify-center gap-2 py-3 text-sm font-medium text-secondary-600 dark:text-surface-300 border-2 border-dashed border-surface-300 dark:border-surface-700 rounded-xl hover:border-primary-400 hover:text-primary-600 transition-colors">
-                <UploadCloud className="w-4 h-4" /> Upload documents (invoice, warranty card, etc.)
-              </button>
-              {formData.documents.length > 0 && (
-                <div className="mt-2 space-y-1.5">
-                  {formData.documents.map((doc: AssetDocument, idx: number) => (
-                    <div key={idx} className="flex items-center gap-2 p-2 bg-surface-50 dark:bg-surface-800 rounded-lg text-xs">
-                      <FileIcon className="w-4 h-4 text-secondary-400 shrink-0" />
-                      <span className="flex-1 truncate text-secondary-700 dark:text-surface-300">{doc.name}</span>
-                      <span className="text-secondary-400 shrink-0">{formatSize(doc.size)}</span>
-                      <button type="button" onClick={() => removeDoc(idx)} className="text-error-500 hover:text-error-700 shrink-0">
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+            {assetKind !== 'card' && assetKind !== 'sim' && (
+              <div>
+                <input type="file" multiple className="hidden" ref={docsInputRef} onChange={handleDocsUpload} />
+                <button type="button" onClick={() => docsInputRef.current?.click()} className="w-full flex items-center justify-center gap-2 py-3 text-sm font-medium text-secondary-600 dark:text-surface-300 border-2 border-dashed border-surface-300 dark:border-surface-700 rounded-xl hover:border-primary-400 hover:text-primary-600 transition-colors">
+                  <UploadCloud className="w-4 h-4" /> Upload documents (invoice, warranty card, etc.)
+                </button>
+                {formData.documents.length > 0 && (
+                  <div className="mt-2 space-y-1.5">
+                    {formData.documents.map((doc: AssetDocument, idx: number) => (
+                      <div key={idx} className="flex items-center gap-2 p-2 bg-surface-50 dark:bg-surface-800 rounded-lg text-xs">
+                        <FileIcon className="w-4 h-4 text-secondary-400 shrink-0" />
+                        <span className="flex-1 truncate text-secondary-700 dark:text-surface-300">{doc.name}</span>
+                        <span className="text-secondary-400 shrink-0">{formatSize(doc.size)}</span>
+                        <button type="button" onClick={() => removeDoc(idx)} className="text-error-500 hover:text-error-700 shrink-0">
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="flex gap-3 px-6 py-4 border-t border-surface-200 dark:border-surface-800 flex-shrink-0">
@@ -696,7 +1354,8 @@ function AssignEmployeeModal({ asset, onClose }: { asset: Asset; onClose: () => 
   const filtered = search
     ? activeEmployees.filter(e =>
       `${e.firstName} ${e.lastName}`.toLowerCase().includes(search.toLowerCase()) ||
-      e.designation.toLowerCase().includes(search.toLowerCase())
+      (e.designation || '').toLowerCase().includes(search.toLowerCase()) ||
+      (e.employeeId || '').toLowerCase().includes(search.toLowerCase())
     )
     : activeEmployees;
 
@@ -775,6 +1434,163 @@ function AssignEmployeeModal({ asset, onClose }: { asset: Asset; onClose: () => 
           <button onClick={handleAssign} className="btn-primary flex-1">
             <UserCheck className="w-4 h-4" />
             Assign
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Reassign / Change Assigned Person Modal ──────────────────────────────────
+function ReassignEmployeeModal({
+  asset,
+  currentEmployee,
+  onClose,
+}: {
+  asset: Asset;
+  currentEmployee: any;
+  onClose: () => void;
+}) {
+  const { reassignAsset } = useAssets();
+  const [selectedEmpId, setSelectedEmpId] = useState('');
+  const [remarks, setRemarks] = useState('');
+  const [search, setSearch] = useState('');
+  const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [employees, setEmployees] = useState<any[]>([]);
+
+  useEffect(() => {
+    api.get('/api/employees')
+      .then((d: any) => setEmployees(Array.isArray(d) ? d : []))
+      .catch((e) => console.error('Failed to load employees:', e));
+  }, []);
+
+  const activeEmployees = employees.filter(
+    e => String(e.status || '').toLowerCase() === 'active' && e.id !== currentEmployee?.id
+  );
+  const filtered = search
+    ? activeEmployees.filter(e =>
+        `${e.firstName} ${e.lastName}`.toLowerCase().includes(search.toLowerCase()) ||
+        (e.designation || '').toLowerCase().includes(search.toLowerCase()) ||
+        (e.employeeId || '').toLowerCase().includes(search.toLowerCase())
+      )
+    : activeEmployees;
+
+  const handleReassign = async () => {
+    if (!selectedEmpId) {
+      setError('Please select a new employee.');
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      await reassignAsset(asset.id, selectedEmpId, remarks);
+      onClose();
+    } catch (err: any) {
+      setError(err.message || 'Failed to reassign asset');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-md bg-white dark:bg-surface-900 rounded-2xl shadow-2xl animate-scale-in">
+        <div className="flex items-center justify-between px-6 py-5 border-b border-surface-200 dark:border-surface-800">
+          <div>
+            <h2 className="text-lg font-bold text-secondary-900 dark:text-white flex items-center gap-2">
+              <UserCheck className="w-5 h-5 text-primary-600" />
+              Change Assigned Person
+            </h2>
+            <p className="text-sm text-secondary-500 mt-0.5 truncate">
+              Asset: <span className="font-semibold text-secondary-800 dark:text-surface-200">{asset.name}</span>
+            </p>
+          </div>
+          <button onClick={onClose} className="p-2 rounded-lg hover:bg-surface-100 dark:hover:bg-surface-800 text-secondary-400">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Current Assigned Person info */}
+        {currentEmployee && (
+          <div className="px-6 py-3 bg-surface-50 dark:bg-surface-800/50 border-b border-surface-200 dark:border-surface-800 flex items-center justify-between">
+            <span className="text-xs text-secondary-500">Currently assigned to:</span>
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-full bg-primary-600 text-white text-[10px] font-bold flex items-center justify-center">
+                {currentEmployee.firstName?.charAt(0)}
+              </div>
+              <span className="text-xs font-semibold text-secondary-900 dark:text-white">
+                {currentEmployee.firstName} {currentEmployee.lastName}
+              </span>
+            </div>
+          </div>
+        )}
+
+        <div className="p-4 border-b border-surface-200 dark:border-surface-800">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-secondary-400" />
+            <input
+              type="text"
+              placeholder="Search new employee by name or designation..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="input-field pl-9 py-2 text-sm"
+              autoFocus
+            />
+          </div>
+        </div>
+
+        <div className="max-h-60 overflow-y-auto p-2">
+          {filtered.length === 0 ? (
+            <p className="text-center py-6 text-sm text-secondary-400">No matching employees found</p>
+          ) : (
+            filtered.map(emp => {
+              const selected = selectedEmpId === emp.id;
+              return (
+                <button
+                  key={emp.id}
+                  onClick={() => { setSelectedEmpId(emp.id); setError(''); }}
+                  className={cn(
+                    'w-full flex items-center gap-3 p-3 rounded-xl transition-all text-left mb-1',
+                    selected
+                      ? 'bg-primary-50 dark:bg-primary-900/20 ring-2 ring-primary-500'
+                      : 'hover:bg-surface-50 dark:hover:bg-surface-800'
+                  )}
+                >
+                  <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary-400 to-accent-500 text-white flex items-center justify-center text-xs font-bold flex-shrink-0">
+                    {emp.firstName.charAt(0)}{emp.lastName.charAt(0)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-secondary-900 dark:text-white truncate">{emp.firstName} {emp.lastName}</p>
+                    <p className="text-xs text-secondary-500 truncate">{emp.designation || 'Staff'} · {emp.employeeId}</p>
+                  </div>
+                  {selected && <CheckCircle2 className="w-5 h-5 text-primary-500 flex-shrink-0" />}
+                </button>
+              );
+            })
+          )}
+        </div>
+
+        <div className="px-6 py-3 border-t border-surface-100 dark:border-surface-800">
+          <label className="block text-xs font-medium text-secondary-600 dark:text-surface-300 mb-1">
+            Reason / Remarks (Optional)
+          </label>
+          <input
+            type="text"
+            placeholder="e.g. Device transfer, department change"
+            value={remarks}
+            onChange={e => setRemarks(e.target.value)}
+            className="input-field text-xs py-1.5"
+          />
+        </div>
+
+        {error && <p className="px-6 py-2 text-xs text-error-600">{error}</p>}
+
+        <div className="flex gap-3 px-6 py-4 border-t border-surface-200 dark:border-surface-800 bg-surface-50 dark:bg-surface-800/50 rounded-b-2xl">
+          <button onClick={onClose} disabled={isSubmitting} className="btn-secondary flex-1">Cancel</button>
+          <button onClick={handleReassign} disabled={isSubmitting || !selectedEmpId} className="btn-primary flex-1">
+            <UserCheck className="w-4 h-4" />
+            {isSubmitting ? 'Transferring...' : 'Confirm Reassign'}
           </button>
         </div>
       </div>
@@ -895,17 +1711,38 @@ export default function Assets() {
   // selectedTimesheet state kept for future detail modal
   const [returnTarget, setReturnTarget] = useState<{ assignmentId: string; assetName: string } | null>(null);
   const [assignTarget, setAssignTarget] = useState<Asset | null>(null);
+  const [reassignTarget, setReassignTarget] = useState<{ asset: Asset; currentEmployee: any } | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showTypeModal, setShowTypeModal] = useState(false);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [editTarget, setEditTarget] = useState<Asset | null>(null);
   const [cloneTarget, setCloneTarget] = useState<Asset | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Asset | null>(null);
+  const [successModalConfig, setSuccessModalConfig] = useState<{
+    isOpen: boolean;
+    title: string;
+    subtitle: string;
+    animationType?: 'contract' | 'delete' | 'tick';
+  }>({
+    isOpen: false,
+    title: '',
+    subtitle: '',
+    animationType: 'contract',
+  });
 
   const { deleteAsset } = useAssets();
 
   const getAssignment = (assetId: string) =>
     assignments.find((aa: any) => aa.assetId === assetId && !aa.returnedDate);
+
+  const typeCounts = useMemo(() => {
+    const counts: Record<string, number> = { all: assets.length };
+    assets.forEach((a: any) => {
+      const t = String(a.assetType || '').toLowerCase();
+      counts[t] = (counts[t] || 0) + 1;
+    });
+    return counts;
+  }, [assets]);
 
   const userVisibleAssets = useMemo(() => {
     let filtered = canManageAssets
@@ -919,10 +1756,14 @@ export default function Assets() {
       const term = search.toLowerCase();
       filtered = filtered.filter(a =>
         a.name.toLowerCase().includes(term) ||
-        (a.serialNumber?.toLowerCase().includes(term) ?? false)
+        (a.serialNumber?.toLowerCase().includes(term) ?? false) ||
+        (a.mobileNumber?.toLowerCase().includes(term) ?? false)
       );
     }
-    if (typeFilter !== 'all') filtered = filtered.filter(a => (a as any).assetType === typeFilter);
+    if (typeFilter !== 'all') {
+      const targetType = typeFilter.toLowerCase();
+      filtered = filtered.filter(a => String((a as any).assetType || '').toLowerCase() === targetType);
+    }
     if (statusFilter !== 'all') filtered = filtered.filter(a => String(a.status || '').toLowerCase() === statusFilter);
     if (employeeFilter !== 'all') {
       filtered = filtered.filter(a => {
@@ -981,9 +1822,52 @@ export default function Assets() {
         )}
       </div>
 
-      {/* Filters */}
-      <div className="card p-4">
-        <div className="flex flex-col sm:flex-row gap-3">
+      {/* Filters & Quick Category Tabs */}
+      <div className="card p-4 space-y-3.5">
+        {/* Quick Type Filter Pills ("All", "Laptops", "Mobiles", "Desktops", etc.) */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+          <button
+            onClick={() => setTypeFilter('all')}
+            className={cn(
+              'px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 shadow-sm',
+              typeFilter === 'all'
+                ? 'bg-primary-600 text-white shadow-primary-500/25 ring-2 ring-primary-600/20'
+                : 'bg-surface-100 dark:bg-surface-800 text-secondary-700 dark:text-surface-300 hover:bg-surface-200 dark:hover:bg-surface-700'
+            )}
+          >
+            <span>All Assets</span>
+            <span className={cn('px-1.5 py-0.2 rounded-full text-[10px] font-bold', typeFilter === 'all' ? 'bg-white/25 text-white' : 'bg-surface-200 dark:bg-surface-700 text-secondary-600 dark:text-surface-300')}>
+              {assets.length}
+            </span>
+          </button>
+
+          {assetTypes.map(t => {
+            const count = typeCounts[t.name.toLowerCase()] || 0;
+            const isSelected = typeFilter.toLowerCase() === t.name.toLowerCase();
+            const TypeIcon = getIconComponent(t.icon);
+            return (
+              <button
+                key={t.id}
+                onClick={() => setTypeFilter(isSelected ? 'all' : t.name)}
+                className={cn(
+                  'px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 shadow-sm',
+                  isSelected
+                    ? 'bg-primary-600 text-white shadow-primary-500/25 ring-2 ring-primary-600/20'
+                    : 'bg-surface-100 dark:bg-surface-800 text-secondary-700 dark:text-surface-300 hover:bg-surface-200 dark:hover:bg-surface-700'
+                )}
+              >
+                <TypeIcon className="w-3.5 h-3.5" />
+                <span>{t.name}</span>
+                <span className={cn('px-1.5 py-0.2 rounded-full text-[10px] font-bold', isSelected ? 'bg-white/25 text-white' : 'bg-surface-200 dark:bg-surface-700 text-secondary-600 dark:text-surface-300')}>
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Search & Dropdown Filters */}
+        <div className="flex flex-col sm:flex-row gap-3 pt-2 border-t border-surface-100 dark:border-surface-800">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-secondary-400" />
             <input
@@ -1081,7 +1965,9 @@ export default function Assets() {
               <tbody className="divide-y divide-surface-100 dark:divide-surface-800">
                 {userVisibleAssets.length === 0 ? (
                   <tr>
-                    <td colSpan={canManageAssets ? 7 : 6} className="px-4 py-12 text-center text-secondary-400">No assets found</td>
+                    <td colSpan={canManageAssets ? 7 : 6} className="py-12 text-center bg-transparent">
+                      <NoDataAnimation />
+                    </td>
                   </tr>
                 ) : (
                   userVisibleAssets.map(asset => {
@@ -1089,7 +1975,7 @@ export default function Assets() {
                     const statusConf = getStatusConf(asset.status);
                     const TypeIcon = typeStyle.icon;
                     const assignment = getAssignment(asset.id);
-                    const assignedEmployee = assignment ? (employees.find(e => e.id === assignment.employeeId)) : null;
+                    const assignedEmployee = assignment ? (employees.find((e: any) => e.id === assignment.employeeId) || employees.find((e: any) => e.employeeId === assignment.employeeId)) : null;
 
                     return (
                       <tr key={asset.id} className="hover:bg-surface-50 dark:hover:bg-surface-800/50 transition-colors">
@@ -1100,7 +1986,16 @@ export default function Assets() {
                             </div>
                             <div>
                               <p className="text-sm font-semibold text-secondary-900 dark:text-white">{asset.name}</p>
-                              {asset.serialNumber && <p className="text-xs text-secondary-500">S/N: {asset.serialNumber}</p>}
+                              {asset.serialNumber && (
+                                <p className="text-xs text-secondary-500">
+                                  {getAssetKind(asset.assetType, (asset as any).category) === 'card'
+                                    ? `🪪 Card No: ${asset.serialNumber}`
+                                    : getAssetKind(asset.assetType, (asset as any).category) === 'sim'
+                                      ? `📶 ICCID: ${asset.serialNumber}`
+                                      : `S/N: ${asset.serialNumber}`}
+                                </p>
+                              )}
+                              {asset.mobileNumber && <p className="text-xs text-secondary-500 font-medium">📱 {asset.mobileNumber}</p>}
                             </div>
                           </div>
                         </td>
@@ -1113,13 +2008,23 @@ export default function Assets() {
                         <td className="px-4 py-4">
                           {assignedEmployee ? (
                             <div className="flex items-center gap-2">
-                              <div className="w-6 h-6 rounded-full bg-gradient-to-br from-primary-400 to-accent-500 text-white flex items-center justify-center text-[10px] font-bold shrink-0">
+                              <div className="w-7 h-7 rounded-full bg-gradient-to-br from-primary-400 to-accent-500 text-white flex items-center justify-center text-[10px] font-bold shrink-0">
                                 {assignedEmployee.firstName.charAt(0)}
                               </div>
-                              <div>
-                                <button onClick={() => navigate(`/profile/${assignedEmployee.id}`)} className="text-sm font-medium text-secondary-900 dark:text-white hover:text-primary-600 truncate max-w-[120px] text-left block">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span className="text-sm font-medium text-secondary-900 dark:text-white truncate max-w-[120px] block">
                                   {assignedEmployee.firstName} {assignedEmployee.lastName}
-                                </button>
+                                </span>
+                                {canManageAssets && (
+                                  <button
+                                    onClick={() => setReassignTarget({ asset: asset as any, currentEmployee: assignedEmployee })}
+                                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary-600 hover:text-primary-700 bg-primary-50 dark:bg-primary-950/60 hover:bg-primary-100 dark:hover:bg-primary-900/60 px-2 py-0.5 rounded-md transition-colors border border-primary-200/50 dark:border-primary-800/50 shrink-0"
+                                    title="Change assigned person"
+                                  >
+                                    <UserCheck className="w-3 h-3" />
+                                    Change
+                                  </button>
+                                )}
                               </div>
                             </div>
                           ) : (
@@ -1140,9 +2045,18 @@ export default function Assets() {
                           <td className="px-4 py-4 text-right">
                             <div className="flex items-center justify-end gap-1">
                               {assignedEmployee && (
-                                <button onClick={() => setReturnTarget({ assignmentId: assignment!.id, assetName: asset.name })} className="p-1.5 text-warning-600 hover:bg-warning-50 rounded-lg transition-colors" title="Return">
-                                  <RotateCcw className="w-4 h-4" />
-                                </button>
+                                <>
+                                  <button
+                                    onClick={() => setReassignTarget({ asset: asset as any, currentEmployee: assignedEmployee })}
+                                    className="p-1.5 text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/30 rounded-lg transition-colors"
+                                    title="Change assigned person (Reassign)"
+                                  >
+                                    <UserCheck className="w-4 h-4" />
+                                  </button>
+                                  <button onClick={() => setReturnTarget({ assignmentId: assignment!.id, assetName: asset.name })} className="p-1.5 text-warning-600 hover:bg-warning-50 rounded-lg transition-colors" title="Return">
+                                    <RotateCcw className="w-4 h-4" />
+                                  </button>
+                                </>
                               )}
                               <button onClick={() => setEditTarget(asset as any)} className="p-1.5 text-secondary-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors" title="Edit">
                                 <Edit2 className="w-4 h-4" />
@@ -1167,9 +2081,8 @@ export default function Assets() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {userVisibleAssets.length === 0 ? (
-            <div className="col-span-full card p-12 text-center">
-              <Package className="w-12 h-12 mx-auto text-secondary-300 mb-3" />
-              <p className="text-secondary-400">No assets found</p>
+            <div className="col-span-full py-12 flex justify-center bg-transparent">
+              <NoDataAnimation />
             </div>
           ) : (
             userVisibleAssets.map(asset => {
@@ -1218,7 +2131,16 @@ export default function Assets() {
                   <div>
                     <h3 className="text-base font-semibold text-secondary-900 dark:text-white">{asset.name}</h3>
                     {asset.serialNumber && (
-                      <p className="text-xs text-secondary-500 mt-0.5">S/N: {asset.serialNumber}</p>
+                      <p className="text-xs text-secondary-500 mt-0.5">
+                        {getAssetKind(asset.assetType, (asset as any).category) === 'card'
+                          ? `🪪 Card No: ${asset.serialNumber}`
+                          : getAssetKind(asset.assetType, (asset as any).category) === 'sim'
+                            ? `📶 ICCID: ${asset.serialNumber}`
+                            : `S/N: ${asset.serialNumber}`}
+                      </p>
+                    )}
+                    {asset.mobileNumber && (
+                      <p className="text-xs text-secondary-500 mt-0.5 font-medium">📱 {asset.mobileNumber}</p>
                     )}
                     {asset.description && (
                       <p className="text-sm text-secondary-600 dark:text-surface-400 mt-1 line-clamp-2">{asset.description}</p>
@@ -1228,12 +2150,21 @@ export default function Assets() {
                   {/* Assigned-to section */}
                   {assignedEmployee ? (
                     <div className="pt-3 border-t border-surface-100 dark:border-surface-800">
-                      <p className="text-xs text-secondary-400 uppercase tracking-wider mb-2">Assigned To</p>
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-xs text-secondary-400 uppercase tracking-wider">Assigned To</p>
+                        {canManageAssets && (
+                          <button
+                            onClick={() => setReassignTarget({ asset: asset as any, currentEmployee: assignedEmployee })}
+                            className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary-600 hover:text-primary-700 bg-primary-50 dark:bg-primary-950/60 px-2 py-0.5 rounded-md transition-colors border border-primary-200/50 dark:border-primary-800/50"
+                            title="Change assigned person"
+                          >
+                            <UserCheck className="w-3 h-3" />
+                            Change
+                          </button>
+                        )}
+                      </div>
                       <div className="flex items-center gap-2">
-                        <button
-                          className="flex items-center gap-2 flex-1 min-w-0 hover:opacity-80 transition-opacity"
-                          onClick={() => navigate(`/profile/${assignedEmployee.id}`)}
-                        >
+                        <div className="flex items-center gap-2 flex-1 min-w-0">
                           <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary-400 to-accent-500 text-white flex items-center justify-center text-xs font-bold flex-shrink-0">
                             {assignedEmployee.firstName.charAt(0)}
                           </div>
@@ -1241,14 +2172,14 @@ export default function Assets() {
                             <p className="text-sm font-medium text-secondary-900 dark:text-white truncate">{assignedEmployee.firstName} {assignedEmployee.lastName}</p>
                             <p className="text-xs text-secondary-500">Since {formatDate(assignment!.assignedDate)}</p>
                           </div>
-                        </button>
+                        </div>
                         {canManageAssets && (
                           <button
                             onClick={() => setReturnTarget({ assignmentId: assignment!.id, assetName: asset.name })}
                             className="flex items-center gap-1 text-xs text-warning-600 hover:text-warning-700 font-medium px-2 py-1 rounded-lg hover:bg-warning-50 transition-colors flex-shrink-0"
+                            title="Return asset"
                           >
                             <RotateCcw className="w-3.5 h-3.5" />
-                            Return
                           </button>
                         )}
                       </div>
@@ -1273,11 +2204,60 @@ export default function Assets() {
         </div>
       )}
 
-      {showTypeModal && <AddAssetTypeModal onClose={() => setShowTypeModal(false)} />}
-      {showCategoryModal && <AddAssetCategoryModal onClose={() => setShowCategoryModal(false)} />}
-      {showAddModal && <AddAssetModal onClose={() => setShowAddModal(false)} />}
+      {showTypeModal && (
+        <AddAssetTypeModal
+          onClose={() => setShowTypeModal(false)}
+          onDeleted={(typeName) => {
+            setSuccessModalConfig({
+              isOpen: true,
+              title: 'Asset Type Deleted',
+              subtitle: `"${typeName}" has been permanently removed.`,
+              animationType: 'delete',
+            });
+          }}
+        />
+      )}
+      {showCategoryModal && (
+        <AddAssetCategoryModal
+          onClose={() => setShowCategoryModal(false)}
+          onDeleted={(catName) => {
+            setSuccessModalConfig({
+              isOpen: true,
+              title: 'Asset Category Deleted',
+              subtitle: `"${catName}" has been permanently removed.`,
+              animationType: 'delete',
+            });
+          }}
+        />
+      )}
+      {showAddModal && (
+        <AddAssetModal
+          onClose={() => setShowAddModal(false)}
+          onCreated={(name, type) => {
+            setShowAddModal(false);
+            setSuccessModalConfig({
+              isOpen: true,
+              title: 'Asset Added Successfully!',
+              subtitle: `"${name}" (${type}) has been added to the asset inventory.`,
+            });
+          }}
+        />
+      )}
       {editTarget && <AddAssetModal asset={editTarget} onClose={() => setEditTarget(null)} />}
-      {cloneTarget && <AddAssetModal cloneFrom={cloneTarget} onClose={() => setCloneTarget(null)} />}
+      {cloneTarget && (
+        <AddAssetModal
+          cloneFrom={cloneTarget}
+          onClose={() => setCloneTarget(null)}
+          onCreated={(name, type) => {
+            setCloneTarget(null);
+            setSuccessModalConfig({
+              isOpen: true,
+              title: 'Asset Cloned Successfully!',
+              subtitle: `"${name}" (${type}) has been created in the asset inventory.`,
+            });
+          }}
+        />
+      )}
 
       {assignTarget && (
         <AssignEmployeeModal
@@ -1286,7 +2266,31 @@ export default function Assets() {
         />
       )}
 
-      {deleteTarget && <DeleteAssetModal asset={deleteTarget} onClose={() => setDeleteTarget(null)} onConfirm={async () => { await deleteAsset(deleteTarget.id); setDeleteTarget(null); }} />}
+      {reassignTarget && (
+        <ReassignEmployeeModal
+          asset={reassignTarget.asset}
+          currentEmployee={reassignTarget.currentEmployee}
+          onClose={() => setReassignTarget(null)}
+        />
+      )}
+
+      {deleteTarget && (
+        <DeleteAssetModal
+          asset={deleteTarget}
+          onClose={() => setDeleteTarget(null)}
+          onConfirm={async () => {
+            const assetName = deleteTarget.name;
+            await deleteAsset(deleteTarget.id);
+            setDeleteTarget(null);
+            setSuccessModalConfig({
+              isOpen: true,
+              title: 'Asset Deleted',
+              subtitle: `"${assetName}" has been permanently removed.`,
+              animationType: 'delete',
+            });
+          }}
+        />
+      )}
       {returnTarget && (
         <ReturnModal
           assetName={returnTarget.assetName}
@@ -1294,6 +2298,14 @@ export default function Assets() {
           onClose={() => setReturnTarget(null)}
         />
       )}
+
+      <SuccessAnimationModal
+        isOpen={successModalConfig.isOpen}
+        title={successModalConfig.title}
+        subtitle={successModalConfig.subtitle}
+        animationType={successModalConfig.animationType || 'contract'}
+        onClose={() => setSuccessModalConfig(prev => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 }

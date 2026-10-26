@@ -6,7 +6,7 @@ interface AuthContextType {
   user: Employee | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  login: (email: string, password: string) => Promise<{ success: boolean; error?: string; user?: Employee }>;
   signup: (data: any) => Promise<boolean>;
   logout: () => void;
   isAdmin: boolean;
@@ -53,7 +53,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const res = await api.post('/api/auth/login', { email, password });
       localStorage.setItem('token', res.token);
       setUser(res.employee);
-      return { success: true };
+      return { success: true, user: res.employee };
     } catch (error: any) {
       console.error('Login failed:', error);
       return { success: false, error: error?.message || 'Invalid email or password.' };

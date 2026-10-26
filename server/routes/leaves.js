@@ -91,8 +91,15 @@ router.get('/', async (req, res) => {
     });
 
   } catch (err) {
-    console.error('[leaves] GET / error:', err.message);
-    return res.status(500).json({ error: err.message });
+    console.warn('[leaves] External LMS DB unreachable:', err.message);
+    return res.json({
+      balances: [],
+      history: [],
+      permissions: [],
+      lmsUsers: [],
+      isLmsAdmin: ['admin', 'hr', 'manager'].includes(req.user?.role),
+      syncTime: new Date().toISOString()
+    });
   }
 });
 

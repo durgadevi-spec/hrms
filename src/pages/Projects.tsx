@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { formatDate, cn } from '../utils/formatters';
+import NoDataAnimation from '../components/common/NoDataAnimation';
 
 interface Project {
   id: string;
@@ -204,12 +205,8 @@ export default function Projects() {
           <p className="text-sm text-secondary-500 mt-1">{error}</p>
         </div>
       ) : filtered.length === 0 ? (
-        <div className="card p-12 text-center">
-          <FolderKanban className="w-12 h-12 mx-auto mb-4 text-secondary-300" />
-          <p className="font-semibold text-secondary-600 dark:text-surface-300">No projects found</p>
-          <p className="text-sm text-secondary-400 mt-1">
-            {projects.length === 0 ? 'No projects exist in the database yet.' : 'Try adjusting your search or filter.'}
-          </p>
+        <div className="py-12 flex justify-center bg-transparent">
+          <NoDataAnimation />
         </div>
       ) : viewType === 'list' ? (
         <div className="bg-white dark:bg-surface-900 rounded-xl border border-surface-200 dark:border-surface-800 shadow-sm overflow-hidden">

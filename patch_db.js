@@ -48,6 +48,7 @@ async function patch() {
       -- Assets Table additions
       ALTER TABLE assets ADD COLUMN IF NOT EXISTS purchase_date DATE;
       ALTER TABLE assets ADD COLUMN IF NOT EXISTS location VARCHAR(255);
+      ALTER TABLE assets ADD COLUMN IF NOT EXISTS mobile_number VARCHAR(50);
 
       -- Attachments Table support
       -- The employee_attachments table already uses doc_type_enum, which now includes 'Visa Document'.

@@ -44,34 +44,41 @@ function AdminDashboardView() {
       try {
         setIsLoading(true);
         const [emp, depts, leaves, ts, prj, asgn, tsk, syncData] = await Promise.all([
-          api.get('/api/employees'),
-          api.get('/api/departments'),
-          api.get('/api/leave-requests'),
-          api.get('/api/timesheets?scope=org'),
-          api.get('/api/projects'),
-          api.get('/api/projects/assignments/all'),
-          api.get('/api/tasks'),
+          api.get('/api/employees').catch(() => []),
+          api.get('/api/departments').catch(() => []),
+          api.get('/api/leave-requests').catch(() => ({ balances: [], history: [], permissions: [], lmsUsers: [] })),
+          api.get('/api/timesheets?scope=org').catch(() => ({ dailyPlans: [], planTasks: [], dailySubmissions: [], timeEntries: [], timesheetSubmissions: [], employees: [] })),
+          api.get('/api/projects').catch(() => []),
+          api.get('/api/projects/assignments/all').catch(() => []),
+          api.get('/api/tasks').catch(() => []),
           api.get('/api/admin/employee-sync').catch(() => ({ employees: [], summary: null }))
         ]);
 
+        const safeEmp = Array.isArray(emp) ? emp : [];
+        const safeDepts = Array.isArray(depts) ? depts : [];
+        const safeLeaves = leaves && typeof leaves === 'object' ? leaves : { balances: [], history: [], permissions: [], lmsUsers: [] };
+        const safePrj = Array.isArray(prj) ? prj : [];
+        const safeAsgn = Array.isArray(asgn) ? asgn : [];
+        const safeTsk = Array.isArray(tsk) ? tsk : [];
+
         // Merge sync flags into employees list
         const syncMap: Record<string, { inLms: boolean; inPms: boolean }> = {};
-        (syncData.employees || []).forEach((s: any) => {
+        ((syncData && syncData.employees) || []).forEach((s: any) => {
           syncMap[s.id] = { inLms: s.inLms, inPms: s.inPms };
         });
-        const enrichedEmps = emp.map((e: any) => ({
+        const enrichedEmps = safeEmp.map((e: any) => ({
           ...e,
           inLms: syncMap[e.id]?.inLms ?? false,
           inPms: syncMap[e.id]?.inPms ?? false,
         }));
 
         setEmployees(enrichedEmps);
-        setDepartments(depts);
-        setLeavesData(leaves);
-        setTimesheets(ts);
-        setProjects(prj);
-        setProjectAssignments(asgn);
-        setTasks(tsk);
+        setDepartments(safeDepts);
+        setLeavesData(safeLeaves);
+        setTimesheets(ts || []);
+        setProjects(safePrj);
+        setProjectAssignments(safeAsgn);
+        setTasks(safeTsk);
         // setSyncSummary(syncData.summary || null);
       } catch (err) {
         console.error('Failed to load admin dashboard data', err);

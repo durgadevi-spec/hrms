@@ -1,8 +1,12 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Building2, Mail, Lock, User, Hash, Briefcase, ArrowRight, CheckCircle2, Loader2 } from 'lucide-react';
+import { 
+  Mail, Lock, User, Hash, Briefcase, ArrowRight, CheckCircle2, Loader2, Eye, EyeOff 
+} from 'lucide-react';
+import { motion } from 'framer-motion';
 import { ThemeToggle } from '../components/ThemeToggle';
+import { NetworkCanvas } from '../components/NetworkCanvas';
 import { api } from '../lib/api';
 
 type Step = 'email-check' | 'activate' | 'full-signup';
@@ -17,6 +21,7 @@ export default function Signup() {
   const [activationFirstName, setActivationFirstName] = useState('');
   const [activationNewPassword, setActivationNewPassword] = useState('');
   const [activationConfirmPassword, setActivationConfirmPassword] = useState('');
+  const [showActivationPassword, setShowActivationPassword] = useState(false);
 
   // Full signup fields (new user)
   const [password, setPassword] = useState('');
@@ -24,6 +29,7 @@ export default function Signup() {
   const [lastName, setLastName] = useState('');
   const [employeeId, setEmployeeId] = useState('');
   const [designation, setDesignation] = useState('');
+  const [showFullPassword, setShowFullPassword] = useState(false);
 
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -108,325 +114,326 @@ export default function Signup() {
   };
 
   return (
-    <div className="min-h-screen bg-surface-50 dark:bg-surface-950 flex flex-col justify-center py-12 sm:px-6 lg:px-8 relative overflow-hidden transition-colors">
-      <div className="absolute top-4 right-4 z-10">
+    <div className="min-h-screen w-full flex items-center justify-center bg-gradient-to-br from-blue-50/70 via-indigo-50/40 to-slate-100 dark:from-surface-950 dark:via-surface-900 dark:to-surface-950 p-4 sm:p-6 relative overflow-hidden transition-colors">
+      <div className="absolute top-4 right-4 z-20">
         <ThemeToggle />
       </div>
 
-      {/* Background decoration */}
-      <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-[25%] -right-[10%] w-[50%] h-[50%] rounded-full bg-primary-400/10 blur-[120px]" />
-        <div className="absolute -bottom-[25%] -left-[10%] w-[50%] h-[50%] rounded-full bg-accent-400/10 blur-[120px]" />
-      </div>
+      <motion.div
+        initial={{ opacity: 0, scale: 0.96 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.45 }}
+        className="w-full max-w-4xl overflow-hidden rounded-3xl flex flex-col md:flex-row bg-white dark:bg-surface-900 shadow-2xl border border-surface-200/70 dark:border-surface-800"
+      >
+        {/* Left Side: Animated Network Canvas */}
+        <NetworkCanvas
+          title="Join CTI HRMS"
+          subtitle="Set up your official employee profile and get instant access to attendance, leaves, IT assets, and company updates."
+        />
 
-      <div className="sm:mx-auto sm:w-full sm:max-w-md relative z-10 animate-fade-in">
-        <div className="flex justify-center">
-          <div className="w-16 h-16 bg-primary-600 rounded-2xl flex items-center justify-center shadow-xl shadow-primary-500/20 mb-4 transform hover:scale-105 transition-transform">
-            <Building2 className="w-8 h-8 text-white" />
-          </div>
-        </div>
-        <h2 className="text-center text-3xl font-extrabold text-secondary-900 dark:text-white tracking-tight">
-          {step === 'activate' ? `Welcome, ${activationFirstName}!` : 'Join CTI'}
-        </h2>
-        <p className="mt-2 text-center text-sm text-secondary-600 dark:text-surface-400">
-          Already have an account?{' '}
-          <Link to="/login" className="font-medium text-primary-600 hover:text-primary-500 transition-colors">
-            Sign in here
-          </Link>
-        </p>
-      </div>
+        {/* Right Side: Activation / Signup Form */}
+        <div className="w-full md:w-1/2 p-8 sm:p-10 flex flex-col justify-center bg-white dark:bg-surface-900">
+          <motion.div
+            initial={{ opacity: 0, y: 15 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4 }}
+          >
+            <h1 className="text-2xl sm:text-3xl font-bold text-secondary-900 dark:text-white tracking-tight">
+              {step === 'activate' ? `Welcome, ${activationFirstName}!` : 'Join CTI'}
+            </h1>
+            <p className="text-xs sm:text-sm text-secondary-500 dark:text-surface-400 mt-1 mb-6">
+              Already have an account?{' '}
+              <Link to="/login" className="font-semibold text-primary-600 hover:text-primary-500 transition-colors">
+                Sign in here
+              </Link>
+            </p>
 
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md relative z-10 animate-slide-up" style={{ animationDelay: '0.1s' }}>
-        <div className="bg-white/80 dark:bg-surface-900/80 backdrop-blur-xl py-8 px-4 shadow-2xl sm:rounded-2xl sm:px-10 border border-surface-200/50 dark:border-surface-800/50">
+            {error && (
+              <div className="mb-5 p-3.5 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl">
+                <p className="text-xs text-red-700 dark:text-red-300 font-medium text-center">{error}</p>
+              </div>
+            )}
 
-          {error && (
-            <div className="mb-5 p-4 bg-error-50/80 dark:bg-error-900/20 backdrop-blur-sm border border-error-200 dark:border-error-800 rounded-xl animate-shake">
-              <p className="text-sm text-error-600 dark:text-error-400 font-medium text-center">{error}</p>
-            </div>
-          )}
-
-          {/* ─── Step 1: Email Check ──────────────────────────────── */}
-          {step === 'email-check' && (
-            <form className="space-y-6" onSubmit={handleEmailCheck}>
-              <div className="text-center mb-2">
-                <p className="text-sm text-secondary-500 dark:text-surface-400">
+            {/* ─── Step 1: Work Email Check ──────────────────────────── */}
+            {step === 'email-check' && (
+              <form onSubmit={handleEmailCheck} className="space-y-4">
+                <p className="text-xs text-secondary-600 dark:text-surface-400 leading-relaxed">
                   Enter your work email to get started. If you were added by your admin, we'll recognize you automatically.
                 </p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-secondary-700 dark:text-surface-300">Work Email Address</label>
-                <div className="mt-1 relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Mail className="h-5 w-5 text-secondary-400" />
-                  </div>
-                  <input
-                    type="email"
-                    required
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="input-field pl-10 bg-white/50 dark:bg-surface-800/50"
-                    placeholder="you@company.com"
-                    autoFocus
-                  />
-                </div>
-              </div>
-              <button
-                type="submit"
-                disabled={isChecking || !email.trim()}
-                className="w-full btn-primary py-2.5 text-base relative overflow-hidden group"
-              >
-                <span className="relative z-10 flex items-center justify-center gap-2">
-                  {isChecking ? (
-                    <><Loader2 className="w-4 h-4 animate-spin" /> Checking...</>
-                  ) : (
-                    <>Continue <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" /></>
-                  )}
-                </span>
-              </button>
-            </form>
-          )}
 
-          {/* ─── Step 2a: Activate Pre-Provisioned Account ────────── */}
-          {step === 'activate' && (
-            <form className="space-y-5" onSubmit={handleActivate}>
-              {/* Success banner */}
-              <div className="flex items-start gap-3 p-4 bg-success-50 dark:bg-success-900/20 border border-success-200 dark:border-success-800 rounded-xl">
-                <CheckCircle2 className="w-5 h-5 text-success-600 dark:text-success-400 shrink-0 mt-0.5" />
                 <div>
-                  <p className="text-sm font-semibold text-success-800 dark:text-success-300">Account found!</p>
-                  <p className="text-xs text-success-700 dark:text-success-400 mt-0.5">
-                    Your account was set up by your admin. Verify your Employee ID and choose a new password to activate it.
-                  </p>
-                </div>
-              </div>
-
-              {/* Email (read-only) */}
-              <div>
-                <label className="block text-sm font-medium text-secondary-700 dark:text-surface-300">Email</label>
-                <div className="mt-1 relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Mail className="h-5 w-5 text-secondary-400" />
+                  <label className="block text-xs font-semibold text-secondary-700 dark:text-surface-300 mb-1">
+                    Work Email Address <span className="text-blue-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-secondary-400">
+                      <Mail className="h-4 w-4" />
+                    </div>
+                    <input
+                      type="email"
+                      required
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="you@company.com"
+                      className="w-full pl-10 pr-3.5 py-2.5 text-sm bg-surface-50 dark:bg-surface-800/60 border border-surface-200 dark:border-surface-700 rounded-xl text-secondary-900 dark:text-white placeholder:text-secondary-400 focus:outline-none focus:border-primary-500 transition-colors"
+                      autoFocus
+                    />
                   </div>
-                  <input
-                    type="email"
-                    value={email}
-                    readOnly
-                    className="input-field pl-10 bg-surface-100 dark:bg-surface-800 cursor-not-allowed opacity-70"
-                  />
                 </div>
-              </div>
 
-              {/* Employee ID verification */}
-              <div>
-                <label className="block text-sm font-medium text-secondary-700 dark:text-surface-300">
-                  Employee ID <span className="text-secondary-400 font-normal">(for verification)</span>
-                </label>
-                <div className="mt-1 relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Hash className="h-5 w-5 text-secondary-400" />
+                <div className="pt-2">
+                  <button
+                    type="submit"
+                    disabled={isChecking || !email.trim()}
+                    className="w-full py-2.5 px-4 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-md shadow-blue-500/20 hover:shadow-lg transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-60"
+                  >
+                    {isChecking ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Checking...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>Continue</span>
+                        <ArrowRight className="w-4 h-4" />
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* ─── Step 2a: Activate Pre-Provisioned Account ─────────── */}
+            {step === 'activate' && (
+              <form onSubmit={handleActivate} className="space-y-4">
+                <div className="flex items-start gap-2.5 p-3.5 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-xs font-semibold text-emerald-900 dark:text-emerald-200">Account found!</p>
+                    <p className="text-[11px] text-emerald-700 dark:text-emerald-400 mt-0.5">
+                      Verify your Employee ID and choose your password to activate.
+                    </p>
                   </div>
-                  <input
-                    type="text"
-                    required
-                    value={activationEmployeeId}
-                    onChange={(e) => setActivationEmployeeId(e.target.value)}
-                    className="input-field pl-10 bg-white/50 dark:bg-surface-800/50"
-                    placeholder="e.g. EMP004"
-                  />
                 </div>
-                <p className="text-xs text-secondary-400 mt-1">Your Employee ID was provided by your admin or HR team.</p>
-              </div>
 
-              {/* New Password */}
-              <div>
-                <label className="block text-sm font-medium text-secondary-700 dark:text-surface-300">New Password</label>
-                <div className="mt-1 relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Lock className="h-5 w-5 text-secondary-400" />
-                  </div>
-                  <input
-                    type="password"
-                    required
-                    value={activationNewPassword}
-                    onChange={(e) => setActivationNewPassword(e.target.value)}
-                    className="input-field pl-10 bg-white/50 dark:bg-surface-800/50"
-                    placeholder="Min. 6 characters"
-                    minLength={6}
-                  />
-                </div>
-              </div>
-
-              {/* Confirm Password */}
-              <div>
-                <label className="block text-sm font-medium text-secondary-700 dark:text-surface-300">Confirm Password</label>
-                <div className="mt-1 relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Lock className="h-5 w-5 text-secondary-400" />
-                  </div>
-                  <input
-                    type="password"
-                    required
-                    value={activationConfirmPassword}
-                    onChange={(e) => setActivationConfirmPassword(e.target.value)}
-                    className="input-field pl-10 bg-white/50 dark:bg-surface-800/50"
-                    placeholder="Re-enter password"
-                    minLength={6}
-                  />
-                </div>
-              </div>
-
-              <div className="flex gap-3">
-                <button
-                  type="button"
-                  onClick={() => { setStep('email-check'); setError(''); }}
-                  className="flex-1 btn-secondary py-2.5 text-base"
-                >
-                  Back
-                </button>
-                <button
-                  type="submit"
-                  disabled={isLoading}
-                  className="flex-1 btn-primary py-2.5 text-base"
-                >
-                  {isLoading ? 'Activating...' : 'Activate Account'}
-                </button>
-              </div>
-            </form>
-          )}
-
-          {/* ─── Step 2b: Full Signup ──────────────────────────────── */}
-          {step === 'full-signup' && (
-            <form className="space-y-5" onSubmit={handleFullSignup}>
-              <div className="p-3 bg-surface-50 dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded-xl text-xs text-secondary-500">
-                Email <span className="font-semibold text-secondary-700 dark:text-surface-200">{email}</span> is not registered. Fill in your details to create an account.
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-secondary-700 dark:text-surface-300">First Name</label>
-                  <div className="mt-1 relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <User className="h-5 w-5 text-secondary-400" />
+                  <label className="block text-xs font-semibold text-secondary-700 dark:text-surface-300 mb-1">
+                    Work Email
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-secondary-400">
+                      <Mail className="h-4 w-4" />
+                    </div>
+                    <input
+                      type="email"
+                      value={email}
+                      readOnly
+                      className="w-full pl-10 pr-3.5 py-2.5 text-sm bg-surface-100 dark:bg-surface-800 cursor-not-allowed opacity-75 border border-surface-200 dark:border-surface-700 rounded-xl text-secondary-900 dark:text-white"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-secondary-700 dark:text-surface-300 mb-1">
+                    Employee ID <span className="text-blue-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-secondary-400">
+                      <Hash className="h-4 w-4" />
                     </div>
                     <input
                       type="text"
                       required
-                      value={firstName}
-                      onChange={(e) => setFirstName(e.target.value)}
-                      className="input-field pl-10 bg-white/50 dark:bg-surface-800/50"
-                      placeholder="John"
+                      value={activationEmployeeId}
+                      onChange={(e) => setActivationEmployeeId(e.target.value)}
+                      placeholder="e.g. EMP004"
+                      className="w-full pl-10 pr-3.5 py-2.5 text-sm bg-surface-50 dark:bg-surface-800/60 border border-surface-200 dark:border-surface-700 rounded-xl text-secondary-900 dark:text-white placeholder:text-secondary-400 focus:outline-none focus:border-primary-500"
                     />
                   </div>
                 </div>
+
                 <div>
-                  <label className="block text-sm font-medium text-secondary-700 dark:text-surface-300">Last Name</label>
-                  <div className="mt-1 relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <User className="h-5 w-5 text-secondary-400" />
+                  <label className="block text-xs font-semibold text-secondary-700 dark:text-surface-300 mb-1">
+                    New Password <span className="text-blue-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-secondary-400">
+                      <Lock className="h-4 w-4" />
                     </div>
+                    <input
+                      type={showActivationPassword ? 'text' : 'password'}
+                      required
+                      minLength={6}
+                      value={activationNewPassword}
+                      onChange={(e) => setActivationNewPassword(e.target.value)}
+                      placeholder="Min. 6 characters"
+                      className="w-full pl-10 pr-10 py-2.5 text-sm bg-surface-50 dark:bg-surface-800/60 border border-surface-200 dark:border-surface-700 rounded-xl text-secondary-900 dark:text-white placeholder:text-secondary-400 focus:outline-none focus:border-primary-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowActivationPassword(!showActivationPassword)}
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-secondary-400 hover:text-secondary-600"
+                    >
+                      {showActivationPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-secondary-700 dark:text-surface-300 mb-1">
+                    Confirm Password <span className="text-blue-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-secondary-400">
+                      <Lock className="h-4 w-4" />
+                    </div>
+                    <input
+                      type={showActivationPassword ? 'text' : 'password'}
+                      required
+                      minLength={6}
+                      value={activationConfirmPassword}
+                      onChange={(e) => setActivationConfirmPassword(e.target.value)}
+                      placeholder="Re-enter password"
+                      className="w-full pl-10 pr-10 py-2.5 text-sm bg-surface-50 dark:bg-surface-800/60 border border-surface-200 dark:border-surface-700 rounded-xl text-secondary-900 dark:text-white placeholder:text-secondary-400 focus:outline-none focus:border-primary-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex gap-2.5 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setStep('email-check')}
+                    className="w-1/3 py-2.5 px-4 rounded-xl text-xs font-semibold text-secondary-600 dark:text-surface-300 border border-surface-200 dark:border-surface-700 hover:bg-surface-50"
+                  >
+                    Back
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isLoading}
+                    className="w-2/3 py-2.5 px-4 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-md flex items-center justify-center gap-2"
+                  >
+                    {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Activate & Enter'}
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* ─── Step 2b: Full Signup ──────────────────────────────── */}
+            {step === 'full-signup' && (
+              <form onSubmit={handleFullSignup} className="space-y-3.5">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-secondary-700 dark:text-surface-300 mb-1">
+                      First Name *
+                    </label>
+                    <div className="relative">
+                      <User className="absolute left-3 top-3 h-3.5 w-3.5 text-secondary-400" />
+                      <input
+                        type="text"
+                        required
+                        value={firstName}
+                        onChange={(e) => setFirstName(e.target.value)}
+                        placeholder="John"
+                        className="w-full pl-8 pr-3 py-2 text-xs bg-surface-50 dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded-xl"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-secondary-700 dark:text-surface-300 mb-1">
+                      Last Name *
+                    </label>
                     <input
                       type="text"
                       required
                       value={lastName}
                       onChange={(e) => setLastName(e.target.value)}
-                      className="input-field pl-10 bg-white/50 dark:bg-surface-800/50"
                       placeholder="Doe"
+                      className="w-full px-3 py-2 text-xs bg-surface-50 dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded-xl"
                     />
                   </div>
                 </div>
-              </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-secondary-700 dark:text-surface-300">Employee ID</label>
-                  <div className="mt-1 relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <Hash className="h-5 w-5 text-secondary-400" />
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-secondary-700 dark:text-surface-300 mb-1">
+                      Employee ID *
+                    </label>
+                    <div className="relative">
+                      <Hash className="absolute left-3 top-3 h-3.5 w-3.5 text-secondary-400" />
+                      <input
+                        type="text"
+                        required
+                        value={employeeId}
+                        onChange={(e) => setEmployeeId(e.target.value)}
+                        placeholder="EMP001"
+                        className="w-full pl-8 pr-3 py-2 text-xs bg-surface-50 dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded-xl"
+                      />
                     </div>
-                    <input
-                      type="text"
-                      required
-                      value={employeeId}
-                      onChange={(e) => setEmployeeId(e.target.value)}
-                      className="input-field pl-10 bg-white/50 dark:bg-surface-800/50"
-                      placeholder="EMP002"
-                    />
                   </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-secondary-700 dark:text-surface-300">Designation</label>
-                  <div className="mt-1 relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <Briefcase className="h-5 w-5 text-secondary-400" />
+                  <div>
+                    <label className="block text-xs font-semibold text-secondary-700 dark:text-surface-300 mb-1">
+                      Designation *
+                    </label>
+                    <div className="relative">
+                      <Briefcase className="absolute left-3 top-3 h-3.5 w-3.5 text-secondary-400" />
+                      <input
+                        type="text"
+                        required
+                        value={designation}
+                        onChange={(e) => setDesignation(e.target.value)}
+                        placeholder="Developer"
+                        className="w-full pl-8 pr-3 py-2 text-xs bg-surface-50 dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded-xl"
+                      />
                     </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-secondary-700 dark:text-surface-300 mb-1">
+                    Password *
+                  </label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-3 h-3.5 w-3.5 text-secondary-400" />
                     <input
-                      type="text"
+                      type={showFullPassword ? 'text' : 'password'}
                       required
-                      value={designation}
-                      onChange={(e) => setDesignation(e.target.value)}
-                      className="input-field pl-10 bg-white/50 dark:bg-surface-800/50"
-                      placeholder="Developer"
+                      minLength={6}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="Min. 6 characters"
+                      className="w-full pl-8 pr-9 py-2 text-xs bg-surface-50 dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded-xl"
                     />
+                    <button
+                      type="button"
+                      onClick={() => setShowFullPassword(!showFullPassword)}
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-secondary-400"
+                    >
+                      {showFullPassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                    </button>
                   </div>
                 </div>
-              </div>
 
-              {/* Email (read-only) */}
-              <div>
-                <label className="block text-sm font-medium text-secondary-700 dark:text-surface-300">Email</label>
-                <div className="mt-1 relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Mail className="h-5 w-5 text-secondary-400" />
-                  </div>
-                  <input
-                    type="email"
-                    value={email}
-                    readOnly
-                    className="input-field pl-10 bg-surface-100 dark:bg-surface-800 cursor-not-allowed opacity-70"
-                  />
+                <div className="flex gap-2.5 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setStep('email-check')}
+                    className="w-1/3 py-2 px-3 rounded-xl text-xs font-semibold text-secondary-600 dark:text-surface-300 border border-surface-200"
+                  >
+                    Back
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isLoading}
+                    className="w-2/3 py-2 px-3 rounded-xl text-xs font-semibold text-white bg-gradient-to-r from-blue-600 to-indigo-600 shadow-md flex items-center justify-center gap-1.5"
+                  >
+                    {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Create Account'}
+                  </button>
                 </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-secondary-700 dark:text-surface-300">Password</label>
-                <div className="mt-1 relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Lock className="h-5 w-5 text-secondary-400" />
-                  </div>
-                  <input
-                    type="password"
-                    required
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="input-field pl-10 bg-white/50 dark:bg-surface-800/50"
-                    placeholder="••••••••"
-                    minLength={6}
-                  />
-                </div>
-              </div>
-
-              <div className="flex gap-3">
-                <button
-                  type="button"
-                  onClick={() => { setStep('email-check'); setError(''); }}
-                  className="flex-1 btn-secondary py-2.5 text-base"
-                >
-                  Back
-                </button>
-                <button
-                  type="submit"
-                  disabled={isLoading}
-                  className="flex-1 btn-primary py-2.5 text-base relative overflow-hidden group"
-                >
-                  <span className="relative z-10 flex items-center justify-center gap-2">
-                    {isLoading ? 'Creating...' : 'Create Account'}
-                  </span>
-                </button>
-              </div>
-            </form>
-          )}
+              </form>
+            )}
+          </motion.div>
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 }

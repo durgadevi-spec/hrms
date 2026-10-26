@@ -68,6 +68,9 @@ export default function AssetsForm({ employeeId, data, onChange }: Props) {
                   {asset?.serialNumber && (
                     <p className="text-xs text-secondary-500">S/N: {asset.serialNumber}</p>
                   )}
+                  {asset?.mobileNumber && (
+                    <p className="text-xs text-secondary-500">📱 {asset.mobileNumber}</p>
+                  )}
                 </div>
                 <span className="badge badge-success text-[10px]">Active</span>
               </div>
@@ -133,6 +136,9 @@ export default function AssetsForm({ employeeId, data, onChange }: Props) {
                       <p className="text-sm font-medium text-secondary-900 dark:text-white truncate">{asset.name}</p>
                       {asset.serialNumber && (
                         <p className="text-[10px] text-secondary-400">S/N: {asset.serialNumber}</p>
+                      )}
+                      {asset.mobileNumber && (
+                        <p className="text-[10px] text-secondary-400">📱 {asset.mobileNumber}</p>
                       )}
                     </div>
                     <Plus className="w-4 h-4 text-primary-500 flex-shrink-0" />

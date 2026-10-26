@@ -1,10 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { 
   Receipt, Plus, Search, CheckCircle2, Clock, AlertCircle, 
-  X, FileText, Zap, RefreshCw, Wallet, Send, CheckCheck, ExternalLink
+  X, FileText, Zap, RefreshCw, Wallet, Send, CheckCheck, ExternalLink,
+  Pencil, Trash2, Calendar, ArrowUpDown, ChevronUp, ChevronDown, RotateCcw, Filter
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { cn } from '../utils/formatters';
+import SuccessAnimationModal from '../components/common/SuccessAnimationModal';
+import NoDataAnimation from '../components/common/NoDataAnimation';
 
 interface Bill {
   id: number | string;
@@ -14,8 +17,27 @@ interface Bill {
   status: 'UNPAID' | 'PAID';
   recipient_number: string;
   invoice_url?: string;
+  invoice_urls?: string[];
   paid_at?: string;
   days_left: number;
+}
+
+export function getBillInvoices(bill: Bill): string[] {
+  if (bill.invoice_urls && Array.isArray(bill.invoice_urls) && bill.invoice_urls.length > 0) {
+    return bill.invoice_urls;
+  }
+  if (!bill.invoice_url) return [];
+  const raw = bill.invoice_url.trim();
+  if (raw.startsWith('[')) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed.filter(Boolean);
+    } catch {}
+  }
+  if (raw.includes(',')) {
+    return raw.split(',').map(s => s.trim()).filter(Boolean);
+  }
+  return [raw];
 }
 
 interface Stats {
@@ -47,21 +69,53 @@ export default function Bills() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'UNPAID' | 'PAID'>('all');
+  const [monthFilter, setMonthFilter] = useState<string>('all');
+  const [dateFilter, setDateFilter] = useState<string>('');
+  const [sortColumn, setSortColumn] = useState<'name' | 'amount' | 'due_date' | 'status' | null>(null);
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   
   // Modals
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [payModalBill, setPayModalBill] = useState<Bill | null>(null);
+  const [editModalBill, setEditModalBill] = useState<Bill | null>(null);
+  const [deleteModalBill, setDeleteModalBill] = useState<Bill | null>(null);
+  const [successModalConfig, setSuccessModalConfig] = useState<{
+    isOpen: boolean;
+    title: string;
+    subtitle: string;
+    animationType?: 'contract' | 'delete' | 'tick';
+  }>({
+    isOpen: false,
+    title: '',
+    subtitle: '',
+    animationType: 'contract',
+  });
+
+  // Edit Form State
+  const [editName, setEditName] = useState('');
+  const [editAmount, setEditAmount] = useState('');
+  const [editDueDate, setEditDueDate] = useState('');
+  const [editRecipientNumber, setEditRecipientNumber] = useState('');
+  const [editStatus, setEditStatus] = useState<'UNPAID' | 'PAID'>('UNPAID');
+  const [editExistingInvoices, setEditExistingInvoices] = useState<string[]>([]);
+  const [editNewFiles, setEditNewFiles] = useState<File[]>([]);
+  const [isEditSubmitting, setIsEditSubmitting] = useState(false);
+  const [editErrorMsg, setEditErrorMsg] = useState('');
+
+  // Delete State
+  const [isDeleteSubmitting, setIsDeleteSubmitting] = useState(false);
 
   // Add Form State
   const [name, setName] = useState('');
   const [amount, setAmount] = useState('');
   const [dueDate, setDueDate] = useState('');
   const [recipientNumber, setRecipientNumber] = useState('');
+  const [addInvoiceFiles, setAddInvoiceFiles] = useState<File[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
   // Pay Form State
-  const [payInvoiceFile, setPayInvoiceFile] = useState<File | null>(null);
+  const [payInvoiceFiles, setPayInvoiceFiles] = useState<File[]>([]);
   const [isPaySubmitting, setIsPaySubmitting] = useState(false);
 
   // Manual Cron Trigger State
@@ -128,6 +182,9 @@ export default function Bills() {
       formData.append('amount', amount);
       formData.append('due_date', dueDate);
       formData.append('recipient_number', rawNumbers.join(', '));
+      addInvoiceFiles.forEach(file => {
+        formData.append('invoices', file);
+      });
 
       const token = localStorage.getItem('token');
       const res = await fetch('/api/bills', {
@@ -139,9 +196,16 @@ export default function Bills() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to add bill');
 
+      const savedBillName = name.trim();
+      const savedBillAmount = amount;
       setIsAddModalOpen(false);
       resetAddForm();
       fetchBillsData();
+      setSuccessModalConfig({
+        isOpen: true,
+        title: 'Bill Added Successfully!',
+        subtitle: `"${savedBillName}" (₹${Number(savedBillAmount).toLocaleString()}) has been registered and WhatsApp reminders scheduled.`,
+      });
     } catch (err: any) {
       setErrorMsg(err.message || 'Error adding bill');
     } finally {
@@ -154,6 +218,7 @@ export default function Bills() {
     setAmount('');
     setDueDate('');
     setRecipientNumber('');
+    setAddInvoiceFiles([]);
     setErrorMsg('');
   };
 
@@ -164,9 +229,9 @@ export default function Bills() {
     try {
       setIsPaySubmitting(true);
       const formData = new FormData();
-      if (payInvoiceFile) {
-        formData.append('invoice', payInvoiceFile);
-      }
+      payInvoiceFiles.forEach(file => {
+        formData.append('invoices', file);
+      });
 
       const token = localStorage.getItem('token');
       const res = await fetch(`/api/bills/${payModalBill.id}/pay`, {
@@ -179,7 +244,7 @@ export default function Bills() {
       if (!res.ok) throw new Error(data.error || 'Failed to update bill');
 
       setPayModalBill(null);
-      setPayInvoiceFile(null);
+      setPayInvoiceFiles([]);
       fetchBillsData();
     } catch (err: any) {
       alert('Failed to mark bill as paid: ' + err.message);
@@ -209,13 +274,194 @@ export default function Bills() {
     }
   };
 
-  // Filtered bills
-  const filteredBills = bills.filter(bill => {
-    const matchesSearch = bill.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          bill.recipient_number.includes(searchQuery);
-    const matchesStatus = statusFilter === 'all' ? true : bill.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
+  const openEditModal = (bill: Bill) => {
+    setEditModalBill(bill);
+    setEditName(bill.name);
+    setEditAmount(bill.amount.toString());
+    setEditDueDate(bill.due_date ? bill.due_date.split('T')[0] : '');
+    setEditRecipientNumber(bill.recipient_number);
+    setEditStatus(bill.status);
+    setEditExistingInvoices(getBillInvoices(bill));
+    setEditNewFiles([]);
+    setEditErrorMsg('');
+  };
+
+  const handleEditBill = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editModalBill) return;
+    if (!editName.trim() || !editAmount || !editDueDate || !editRecipientNumber.trim()) {
+      setEditErrorMsg('Please fill in all required fields');
+      return;
+    }
+
+    const rawNumbers = editRecipientNumber.split(',').map(n => n.trim()).filter(Boolean);
+    if (rawNumbers.length === 0) {
+      setEditErrorMsg('Please enter at least one valid recipient phone number');
+      return;
+    }
+
+    const phoneRegex = /^[0-9+]{7,15}$/;
+    const invalidNum = rawNumbers.find(num => !phoneRegex.test(num.replace(/\s+/g, '')));
+    if (invalidNum) {
+      setEditErrorMsg(`Invalid phone number format: "${invalidNum}". Include country code without '+' (e.g. 919876543210).`);
+      return;
+    }
+
+    try {
+      setIsEditSubmitting(true);
+      setEditErrorMsg('');
+
+      const formData = new FormData();
+      formData.append('name', editName.trim());
+      formData.append('amount', editAmount);
+      formData.append('due_date', editDueDate);
+      formData.append('recipient_number', rawNumbers.join(', '));
+      formData.append('status', editStatus);
+      formData.append('existing_invoices', JSON.stringify(editExistingInvoices));
+      if (editExistingInvoices.length === 0 && editNewFiles.length === 0) {
+        formData.append('remove_invoice', 'true');
+      }
+      editNewFiles.forEach(file => {
+        formData.append('invoices', file);
+      });
+
+      const token = localStorage.getItem('token');
+      const res = await fetch(`/api/bills/${editModalBill.id}`, {
+        method: 'PUT',
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to update bill');
+
+      setEditModalBill(null);
+      setEditExistingInvoices([]);
+      setEditNewFiles([]);
+      fetchBillsData();
+    } catch (err: any) {
+      setEditErrorMsg(err.message || 'Error updating bill');
+    } finally {
+      setIsEditSubmitting(false);
+    }
+  };
+
+  const handleDeleteBill = async () => {
+    if (!deleteModalBill) return;
+
+    try {
+      setIsDeleteSubmitting(true);
+      const token = localStorage.getItem('token');
+      const res = await fetch(`/api/bills/${deleteModalBill.id}`, {
+        method: 'DELETE',
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to delete bill');
+
+      const deletedBillName = deleteModalBill.name;
+      setDeleteModalBill(null);
+      fetchBillsData();
+      setSuccessModalConfig({
+        isOpen: true,
+        title: 'Bill Deleted',
+        subtitle: `"${deletedBillName}" has been permanently deleted.`,
+        animationType: 'delete',
+      });
+    } catch (err: any) {
+      alert('Error deleting bill: ' + err.message);
+    } finally {
+      setIsDeleteSubmitting(false);
+    }
+  };
+
+  const handleSort = (column: 'name' | 'amount' | 'due_date' | 'status') => {
+    if (sortColumn === column) {
+      if (sortDirection === 'asc') {
+        setSortDirection('desc');
+      } else {
+        setSortColumn(null);
+        setSortDirection('asc');
+      }
+    } else {
+      setSortColumn(column);
+      setSortDirection('asc');
+    }
+  };
+
+  const resetAllFilters = () => {
+    setSearchQuery('');
+    setStatusFilter('all');
+    setMonthFilter('all');
+    setDateFilter('');
+    setSortColumn(null);
+    setSortDirection('asc');
+  };
+
+  const hasActiveFilters = searchQuery.trim() !== '' || statusFilter !== 'all' || monthFilter !== 'all' || dateFilter !== '' || sortColumn !== null;
+
+  // Extract unique available months from bills
+  const availableMonths = useMemo(() => {
+    const map = new Map<string, string>();
+    bills.forEach(b => {
+      if (b.due_date) {
+        const d = new Date(b.due_date);
+        if (!isNaN(d.getTime())) {
+          const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+          const label = d.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+          map.set(key, label);
+        }
+      }
+    });
+    return Array.from(map.entries()).sort((a, b) => b[0].localeCompare(a[0]));
+  }, [bills]);
+
+  // Filtered & Sorted bills
+  const filteredBills = useMemo(() => {
+    let result = bills.filter(bill => {
+      const matchesSearch = !searchQuery.trim() ||
+        bill.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        bill.recipient_number.includes(searchQuery);
+
+      const matchesStatus = statusFilter === 'all' || bill.status === statusFilter;
+
+      let matchesMonth = true;
+      if (monthFilter !== 'all') {
+        matchesMonth = bill.due_date ? bill.due_date.startsWith(monthFilter) : false;
+      }
+
+      let matchesDate = true;
+      if (dateFilter) {
+        matchesDate = bill.due_date ? bill.due_date.startsWith(dateFilter) : false;
+      }
+
+      return matchesSearch && matchesStatus && matchesMonth && matchesDate;
+    });
+
+    if (sortColumn) {
+      result = [...result].sort((a, b) => {
+        let valA: any = a[sortColumn];
+        let valB: any = b[sortColumn];
+        if (sortColumn === 'amount') {
+          valA = parseFloat(valA || 0);
+          valB = parseFloat(valB || 0);
+        } else if (sortColumn === 'due_date') {
+          valA = new Date(valA).getTime();
+          valB = new Date(valB).getTime();
+        } else {
+          valA = String(valA || '').toLowerCase();
+          valB = String(valB || '').toLowerCase();
+        }
+
+        if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
+        if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+
+    return result;
+  }, [bills, searchQuery, statusFilter, monthFilter, dateFilter, sortColumn, sortDirection]);
 
   return (
     <div className="space-y-6 pb-8">
@@ -306,45 +552,163 @@ export default function Bills() {
         <div className="lg:col-span-2 space-y-4">
           <div className="bg-white dark:bg-surface-900 border border-surface-200 dark:border-surface-800 rounded-2xl shadow-sm overflow-hidden">
             {/* Table Filters & Controls */}
-            <div className="p-4 border-b border-surface-200 dark:border-surface-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="relative flex-1 max-w-xs">
-                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-secondary-400" />
-                <input
-                  type="text"
-                  placeholder="Search bills or recipient..."
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2 text-sm bg-surface-50 dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded-xl text-secondary-900 dark:text-white focus:outline-none focus:border-primary-500"
-                />
+            <div className="p-4 border-b border-surface-200 dark:border-surface-800 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                {/* Search input for Bill Name & Recipient */}
+                <div className="relative flex-1 min-w-[200px] max-w-sm">
+                  <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-secondary-400" />
+                  <input
+                    type="text"
+                    placeholder="Search bill name, recipient..."
+                    value={searchQuery}
+                    onChange={e => setSearchQuery(e.target.value)}
+                    className="w-full pl-9 pr-8 py-2 text-xs sm:text-sm bg-surface-50 dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded-xl text-secondary-900 dark:text-white focus:outline-none focus:border-primary-500"
+                  />
+                  {searchQuery && (
+                    <button
+                      onClick={() => setSearchQuery('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-secondary-400 hover:text-secondary-600"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Status Filter Tabs */}
+                <div className="flex items-center gap-1 bg-surface-100 dark:bg-surface-800 p-1 rounded-xl">
+                  {(['all', 'UNPAID', 'PAID'] as const).map(tab => (
+                    <button
+                      key={tab}
+                      onClick={() => setStatusFilter(tab)}
+                      className={cn(
+                        "px-3 py-1.5 text-xs font-semibold rounded-lg capitalize transition-all",
+                        statusFilter === tab
+                          ? "bg-white dark:bg-surface-700 text-primary-600 dark:text-primary-300 shadow-sm"
+                          : "text-secondary-600 dark:text-surface-400 hover:text-secondary-900 dark:hover:text-white"
+                      )}
+                    >
+                      {tab}
+                    </button>
+                  ))}
+                </div>
               </div>
-              <div className="flex items-center gap-1 bg-surface-100 dark:bg-surface-800 p-1 rounded-xl">
-                {(['all', 'UNPAID', 'PAID'] as const).map(tab => (
-                  <button
-                    key={tab}
-                    onClick={() => setStatusFilter(tab)}
-                    className={cn(
-                      "px-3 py-1.5 text-xs font-semibold rounded-lg capitalize transition-all",
-                      statusFilter === tab
-                        ? "bg-white dark:bg-surface-700 text-primary-600 dark:text-primary-300 shadow-sm"
-                        : "text-secondary-600 dark:text-surface-400 hover:text-secondary-900 dark:hover:text-white"
-                    )}
+
+              {/* Secondary Filter Row: Month, Exact Date, Clear Filters */}
+              <div className="flex flex-wrap items-center gap-2.5 pt-1">
+                {/* Month Dropdown */}
+                <div className="flex items-center gap-1.5 bg-surface-50 dark:bg-surface-800 border border-surface-200 dark:border-surface-700 px-3 py-1.5 rounded-xl text-xs">
+                  <Calendar className="w-3.5 h-3.5 text-secondary-400" />
+                  <span className="text-secondary-500 font-medium">Month:</span>
+                  <select
+                    value={monthFilter}
+                    onChange={e => setMonthFilter(e.target.value)}
+                    className="bg-transparent text-secondary-800 dark:text-surface-200 font-medium focus:outline-none cursor-pointer text-xs"
                   >
-                    {tab}
+                    <option value="all">All Months</option>
+                    {availableMonths.map(([val, label]) => (
+                      <option key={val} value={val} className="dark:bg-surface-900">
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Specific Date Picker */}
+                <div className="flex items-center gap-1.5 bg-surface-50 dark:bg-surface-800 border border-surface-200 dark:border-surface-700 px-3 py-1.5 rounded-xl text-xs">
+                  <Clock className="w-3.5 h-3.5 text-secondary-400" />
+                  <span className="text-secondary-500 font-medium">Date:</span>
+                  <input
+                    type="date"
+                    value={dateFilter}
+                    onChange={e => setDateFilter(e.target.value)}
+                    className="bg-transparent text-secondary-800 dark:text-surface-200 font-medium focus:outline-none cursor-pointer text-xs"
+                  />
+                  {dateFilter && (
+                    <button
+                      onClick={() => setDateFilter('')}
+                      className="text-secondary-400 hover:text-secondary-600"
+                      title="Clear date"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Reset Filters Button */}
+                {hasActiveFilters && (
+                  <button
+                    onClick={resetAllFilters}
+                    className="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-secondary-600 dark:text-surface-300 hover:text-primary-600 dark:hover:text-primary-400 bg-surface-100 dark:bg-surface-800 hover:bg-surface-200 dark:hover:bg-surface-700 rounded-xl transition-colors"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    Reset Filters
                   </button>
-                ))}
+                )}
+
+                <div className="ml-auto text-xs text-secondary-400 font-medium">
+                  Showing <span className="font-bold text-secondary-700 dark:text-surface-200">{filteredBills.length}</span> of {bills.length} bills
+                </div>
               </div>
             </div>
 
             {/* Table */}
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
-                <thead className="bg-surface-50 dark:bg-surface-800/50 text-secondary-500 dark:text-surface-400 text-xs uppercase tracking-wider font-semibold border-b border-surface-200 dark:border-surface-800">
+                <thead className="bg-surface-50 dark:bg-surface-800/50 text-secondary-500 dark:text-surface-400 text-xs uppercase tracking-wider font-semibold border-b border-surface-200 dark:border-surface-800 select-none">
                   <tr>
-                    <th className="px-4 py-3.5">Bill Name</th>
-                    <th className="px-4 py-3.5">Amount</th>
-                    <th className="px-4 py-3.5">Due Date</th>
+                    <th
+                      onClick={() => handleSort('name')}
+                      className="px-4 py-3.5 cursor-pointer hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span>Bill Name</span>
+                        {sortColumn === 'name' ? (
+                          sortDirection === 'asc' ? <ChevronUp className="w-3.5 h-3.5 text-primary-600" /> : <ChevronDown className="w-3.5 h-3.5 text-primary-600" />
+                        ) : (
+                          <ArrowUpDown className="w-3 h-3 text-secondary-300 opacity-60" />
+                        )}
+                      </div>
+                    </th>
+                    <th
+                      onClick={() => handleSort('amount')}
+                      className="px-4 py-3.5 cursor-pointer hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span>Amount</span>
+                        {sortColumn === 'amount' ? (
+                          sortDirection === 'asc' ? <ChevronUp className="w-3.5 h-3.5 text-primary-600" /> : <ChevronDown className="w-3.5 h-3.5 text-primary-600" />
+                        ) : (
+                          <ArrowUpDown className="w-3 h-3 text-secondary-300 opacity-60" />
+                        )}
+                      </div>
+                    </th>
+                    <th
+                      onClick={() => handleSort('due_date')}
+                      className="px-4 py-3.5 cursor-pointer hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span>Due Date</span>
+                        {sortColumn === 'due_date' ? (
+                          sortDirection === 'asc' ? <ChevronUp className="w-3.5 h-3.5 text-primary-600" /> : <ChevronDown className="w-3.5 h-3.5 text-primary-600" />
+                        ) : (
+                          <ArrowUpDown className="w-3 h-3 text-secondary-300 opacity-60" />
+                        )}
+                      </div>
+                    </th>
                     <th className="px-4 py-3.5">Recipient</th>
-                    <th className="px-4 py-3.5">Status</th>
+                    <th
+                      onClick={() => handleSort('status')}
+                      className="px-4 py-3.5 cursor-pointer hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span>Status</span>
+                        {sortColumn === 'status' ? (
+                          sortDirection === 'asc' ? <ChevronUp className="w-3.5 h-3.5 text-primary-600" /> : <ChevronDown className="w-3.5 h-3.5 text-primary-600" />
+                        ) : (
+                          <ArrowUpDown className="w-3 h-3 text-secondary-300 opacity-60" />
+                        )}
+                      </div>
+                    </th>
                     <th className="px-4 py-3.5">Invoice</th>
                     <th className="px-4 py-3.5 text-right">Actions</th>
                   </tr>
@@ -358,8 +722,8 @@ export default function Bills() {
                     </tr>
                   ) : filteredBills.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="px-4 py-8 text-center text-secondary-500">
-                        No bills found.
+                      <td colSpan={7} className="py-8 text-center bg-transparent">
+                        <NoDataAnimation />
                       </td>
                     </tr>
                   ) : (
@@ -404,32 +768,73 @@ export default function Bills() {
                             )}
                           </td>
                           <td className="px-4 py-3.5">
-                            {bill.invoice_url ? (
-                              <a
-                                href={bill.invoice_url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-lg bg-surface-100 dark:bg-surface-800 hover:bg-surface-200 dark:hover:bg-surface-700 text-primary-600 dark:text-primary-400 transition-colors"
-                              >
-                                <FileText className="w-3.5 h-3.5" /> View
-                              </a>
-                            ) : (
-                              <span className="text-xs text-secondary-400">None</span>
-                            )}
+                            {(() => {
+                              const urls = getBillInvoices(bill);
+                              if (urls.length === 0) {
+                                return <span className="text-xs text-secondary-400">None</span>;
+                              }
+                              if (urls.length === 1) {
+                                return (
+                                  <a
+                                    href={urls[0]}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-lg bg-surface-100 dark:bg-surface-800 hover:bg-surface-200 dark:hover:bg-surface-700 text-primary-600 dark:text-primary-400 transition-colors"
+                                    title="View invoice"
+                                  >
+                                    <FileText className="w-3.5 h-3.5" /> View
+                                  </a>
+                                );
+                              }
+                              return (
+                                <div className="flex flex-wrap gap-1 max-w-[160px]">
+                                  {urls.map((url, idx) => (
+                                    <a
+                                      key={idx}
+                                      href={url}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded-md bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 hover:bg-primary-100 dark:hover:bg-primary-900/50 transition-colors"
+                                      title={`View Invoice #${idx + 1}`}
+                                    >
+                                      <FileText className="w-3 h-3" /> #{idx + 1}
+                                    </a>
+                                  ))}
+                                </div>
+                              );
+                            })()}
                           </td>
                           <td className="px-4 py-3.5 text-right">
-                            {bill.status === 'UNPAID' ? (
+                            <div className="flex items-center justify-end gap-1.5">
+                              {bill.status === 'UNPAID' ? (
+                                <button
+                                  onClick={() => setPayModalBill(bill)}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-sm transition-colors"
+                                  title="Mark as Paid"
+                                >
+                                  <CheckCircle2 className="w-3.5 h-3.5" />
+                                  <span>Pay</span>
+                                </button>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 rounded-md font-semibold">
+                                  <CheckCheck className="w-3.5 h-3.5" /> Done
+                                </span>
+                              )}
                               <button
-                                onClick={() => setPayModalBill(bill)}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-sm transition-colors"
+                                onClick={() => openEditModal(bill)}
+                                className="p-1.5 text-secondary-500 hover:text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-lg transition-colors"
+                                title="Edit Bill"
                               >
-                                <CheckCircle2 className="w-3.5 h-3.5" /> Mark Paid
+                                <Pencil className="w-4 h-4" />
                               </button>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 text-xs text-emerald-600 font-semibold">
-                                <CheckCheck className="w-4 h-4" /> Done
-                              </span>
-                            )}
+                              <button
+                                onClick={() => setDeleteModalBill(bill)}
+                                className="p-1.5 text-secondary-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                                title="Delete Bill"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -566,6 +971,48 @@ export default function Bills() {
                 </span>
               </div>
 
+              <div>
+                <label className="block text-xs font-semibold text-secondary-700 dark:text-surface-300 mb-1">
+                  Invoices / Receipts (Optional - 2 or more files supported)
+                </label>
+                {addInvoiceFiles.length > 0 && (
+                  <div className="space-y-1.5 mb-2.5 max-h-36 overflow-y-auto">
+                    {addInvoiceFiles.map((file, idx) => (
+                      <div
+                        key={idx}
+                        className="flex items-center justify-between p-2 bg-surface-50 dark:bg-surface-800 rounded-xl border border-surface-200 dark:border-surface-700 text-xs"
+                      >
+                        <span className="truncate max-w-[240px] text-secondary-700 dark:text-surface-300 font-medium">
+                          📎 {file.name} ({(file.size / 1024).toFixed(0)} KB)
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setAddInvoiceFiles(prev => prev.filter((_, i) => i !== idx))}
+                          className="text-xs text-red-600 hover:text-red-700 font-semibold px-1"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <input
+                  type="file"
+                  multiple
+                  accept="image/*,application/pdf"
+                  onChange={e => {
+                    if (e.target.files) {
+                      const newFiles = Array.from(e.target.files);
+                      setAddInvoiceFiles(prev => [...prev, ...newFiles]);
+                    }
+                  }}
+                  className="w-full text-xs text-secondary-500 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100 dark:file:bg-surface-800 dark:file:text-surface-200"
+                />
+                <span className="text-[11px] text-secondary-400 mt-1 block">
+                  You can select 2 or more invoices / receipt files.
+                </span>
+              </div>
+
               <div className="flex justify-end gap-3 pt-4 border-t border-surface-200 dark:border-surface-800">
                 <button
                   type="button"
@@ -609,12 +1056,39 @@ export default function Bills() {
 
               <div>
                 <label className="block text-xs font-semibold text-secondary-700 dark:text-surface-300 mb-1">
-                  Upload Payment Receipt / Invoice (Optional PDF/Image)
+                  Upload Payment Receipts / Invoices (Optional - 2 or more files supported)
                 </label>
+                {payInvoiceFiles.length > 0 && (
+                  <div className="space-y-1.5 mb-2.5 max-h-36 overflow-y-auto">
+                    {payInvoiceFiles.map((file, idx) => (
+                      <div
+                        key={idx}
+                        className="flex items-center justify-between p-2 bg-emerald-50/60 dark:bg-emerald-950/20 rounded-xl border border-emerald-200 dark:border-emerald-800/50 text-xs"
+                      >
+                        <span className="truncate max-w-[240px] text-emerald-800 dark:text-emerald-200 font-medium">
+                          📎 {file.name} ({(file.size / 1024).toFixed(0)} KB)
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setPayInvoiceFiles(prev => prev.filter((_, i) => i !== idx))}
+                          className="text-xs text-red-600 hover:text-red-700 font-semibold px-1"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 <input
                   type="file"
+                  multiple
                   accept="image/*,application/pdf"
-                  onChange={e => setPayInvoiceFile(e.target.files?.[0] || null)}
+                  onChange={e => {
+                    if (e.target.files) {
+                      const newFiles = Array.from(e.target.files);
+                      setPayInvoiceFiles(prev => [...prev, ...newFiles]);
+                    }
+                  }}
                   className="w-full text-xs text-secondary-500 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100"
                 />
               </div>
@@ -639,6 +1113,284 @@ export default function Bills() {
           </div>
         </div>
       )}
+
+      {/* Modal: Edit Bill */}
+      {editModalBill && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setEditModalBill(null)} />
+          <div className="relative w-full max-w-md bg-white dark:bg-surface-900 rounded-2xl shadow-2xl overflow-hidden animate-scale-in">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-surface-200 dark:border-surface-800">
+              <h2 className="text-lg font-bold text-secondary-900 dark:text-white flex items-center gap-2">
+                <Pencil className="w-5 h-5 text-primary-600" />
+                Edit Bill Reminder
+              </h2>
+              <button onClick={() => setEditModalBill(null)} className="text-secondary-400 hover:text-secondary-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleEditBill} className="p-6 space-y-4">
+              {editErrorMsg && (
+                <div className="p-3 text-xs bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300 rounded-xl border border-red-200">
+                  {editErrorMsg}
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-semibold text-secondary-700 dark:text-surface-300 mb-1">
+                  Bill Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Internet Bill, Office Rent"
+                  value={editName}
+                  onChange={e => setEditName(e.target.value)}
+                  className="w-full px-3.5 py-2 text-sm bg-surface-50 dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded-xl text-secondary-900 dark:text-white focus:outline-none focus:border-primary-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-secondary-700 dark:text-surface-300 mb-1">
+                    Amount (₹) *
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    required
+                    placeholder="1500.00"
+                    value={editAmount}
+                    onChange={e => setEditAmount(e.target.value)}
+                    className="w-full px-3.5 py-2 text-sm bg-surface-50 dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded-xl text-secondary-900 dark:text-white focus:outline-none focus:border-primary-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-secondary-700 dark:text-surface-300 mb-1">
+                    Due Date *
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={editDueDate}
+                    onChange={e => setEditDueDate(e.target.value)}
+                    className="w-full px-3.5 py-2 text-sm bg-surface-50 dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded-xl text-secondary-900 dark:text-white focus:outline-none focus:border-primary-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-secondary-700 dark:text-surface-300 mb-1">
+                  Recipient WhatsApp Numbers (comma-separated for multiple) *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. 919876543210, 919123456789"
+                  value={editRecipientNumber}
+                  onChange={e => setEditRecipientNumber(e.target.value)}
+                  className="w-full px-3.5 py-2 text-sm bg-surface-50 dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded-xl text-secondary-900 dark:text-white focus:outline-none focus:border-primary-500"
+                />
+                <span className="text-[11px] text-secondary-500 mt-1 block">
+                  Separate multiple phone numbers with commas. Include country code without '+' (e.g. 919876543210)
+                </span>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-secondary-700 dark:text-surface-300 mb-1">
+                  Status
+                </label>
+                <div className="flex gap-4">
+                  <label className="inline-flex items-center gap-2 cursor-pointer text-xs font-medium text-secondary-700 dark:text-surface-300">
+                    <input
+                      type="radio"
+                      name="editStatus"
+                      value="UNPAID"
+                      checked={editStatus === 'UNPAID'}
+                      onChange={() => setEditStatus('UNPAID')}
+                      className="text-primary-600 focus:ring-primary-500"
+                    />
+                    UNPAID
+                  </label>
+                  <label className="inline-flex items-center gap-2 cursor-pointer text-xs font-medium text-secondary-700 dark:text-surface-300">
+                    <input
+                      type="radio"
+                      name="editStatus"
+                      value="PAID"
+                      checked={editStatus === 'PAID'}
+                      onChange={() => setEditStatus('PAID')}
+                      className="text-emerald-600 focus:ring-emerald-500"
+                    />
+                    PAID
+                  </label>
+                </div>
+              </div>
+
+              {/* Invoice section */}
+              <div>
+                <label className="block text-xs font-semibold text-secondary-700 dark:text-surface-300 mb-1">
+                  Invoices / Receipts (Optional - 2 or more files supported)
+                </label>
+                
+                {/* Existing Invoices List */}
+                {editExistingInvoices.length > 0 && (
+                  <div className="space-y-1.5 mb-2.5 max-h-36 overflow-y-auto">
+                    <span className="text-[11px] font-medium text-secondary-500 block">
+                      Current Attached Invoices ({editExistingInvoices.length}):
+                    </span>
+                    {editExistingInvoices.map((url, idx) => (
+                      <div
+                        key={idx}
+                        className="flex items-center justify-between p-2.5 bg-surface-50 dark:bg-surface-800 rounded-xl border border-surface-200 dark:border-surface-700 text-xs"
+                      >
+                        <a
+                          href={url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-primary-600 dark:text-primary-400 hover:underline flex items-center gap-1.5 font-semibold truncate max-w-[240px]"
+                          title={`View Invoice #${idx + 1}`}
+                        >
+                          <FileText className="w-4 h-4 flex-shrink-0" />
+                          <span>Invoice #{idx + 1}</span>
+                          <ExternalLink className="w-3 h-3 flex-shrink-0 opacity-70" />
+                        </a>
+                        <button
+                          type="button"
+                          onClick={() => setEditExistingInvoices(prev => prev.filter((_, i) => i !== idx))}
+                          className="text-xs text-red-600 hover:text-red-700 font-semibold px-1"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Staged New Files List */}
+                {editNewFiles.length > 0 && (
+                  <div className="space-y-1.5 mb-2.5 max-h-36 overflow-y-auto">
+                    <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400 block">
+                      New Invoices to Upload ({editNewFiles.length}):
+                    </span>
+                    {editNewFiles.map((file, idx) => (
+                      <div
+                        key={idx}
+                        className="flex items-center justify-between p-2 bg-emerald-50/60 dark:bg-emerald-950/20 rounded-xl border border-emerald-200 dark:border-emerald-800/50 text-xs"
+                      >
+                        <span className="truncate max-w-[240px] text-emerald-800 dark:text-emerald-200 font-medium">
+                          📎 {file.name} ({(file.size / 1024).toFixed(0)} KB)
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setEditNewFiles(prev => prev.filter((_, i) => i !== idx))}
+                          className="text-xs text-red-600 hover:text-red-700 font-semibold px-1"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <input
+                  type="file"
+                  multiple
+                  accept="image/*,application/pdf"
+                  onChange={e => {
+                    if (e.target.files) {
+                      const newFiles = Array.from(e.target.files);
+                      setEditNewFiles(prev => [...prev, ...newFiles]);
+                    }
+                  }}
+                  className="w-full text-xs text-secondary-500 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100 dark:file:bg-surface-800 dark:file:text-surface-200"
+                />
+                <span className="text-[11px] text-secondary-400 mt-1 block">
+                  Select 1, 2 or more additional invoices/receipts (PDF or image).
+                </span>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-surface-200 dark:border-surface-800">
+                <button
+                  type="button"
+                  onClick={() => setEditModalBill(null)}
+                  className="px-4 py-2 text-xs font-semibold text-secondary-600 dark:text-surface-400 hover:bg-surface-100 dark:hover:bg-surface-800 rounded-xl"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isEditSubmitting}
+                  className="px-4 py-2 text-xs font-semibold text-white bg-primary-600 hover:bg-primary-700 rounded-xl shadow-sm disabled:opacity-50"
+                >
+                  {isEditSubmitting ? 'Saving Changes...' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Delete Confirmation */}
+      {deleteModalBill && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setDeleteModalBill(null)} />
+          <div className="relative w-full max-w-sm bg-white dark:bg-surface-900 rounded-2xl shadow-2xl overflow-hidden animate-scale-in">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-surface-200 dark:border-surface-800">
+              <h2 className="text-base font-bold text-secondary-900 dark:text-white flex items-center gap-2">
+                <Trash2 className="w-5 h-5 text-red-600" />
+                Delete Bill Reminder
+              </h2>
+              <button onClick={() => setDeleteModalBill(null)} className="text-secondary-400 hover:text-secondary-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-3">
+              <p className="text-sm text-secondary-700 dark:text-surface-300">
+                Are you sure you want to delete this bill reminder?
+              </p>
+              <div className="p-3 bg-surface-50 dark:bg-surface-800 rounded-xl border border-surface-200 dark:border-surface-700 text-xs space-y-1">
+                <p className="font-bold text-secondary-900 dark:text-white">{deleteModalBill.name}</p>
+                <p className="text-secondary-600 dark:text-surface-400">
+                  Amount: <strong>₹{parseFloat(deleteModalBill.amount.toString()).toLocaleString('en-IN')}</strong>
+                </p>
+                <p className="text-secondary-500">
+                  Due Date: {new Date(deleteModalBill.due_date).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' })}
+                </p>
+              </div>
+              <p className="text-xs text-red-600 dark:text-red-400">
+                This will also remove all associated reminder logs. This action cannot be undone.
+              </p>
+            </div>
+
+            <div className="flex justify-end gap-3 px-6 py-4 bg-surface-50 dark:bg-surface-800/50 border-t border-surface-200 dark:border-surface-800">
+              <button
+                type="button"
+                onClick={() => setDeleteModalBill(null)}
+                className="px-4 py-2 text-xs font-semibold text-secondary-600 dark:text-surface-400 hover:bg-surface-100 dark:hover:bg-surface-800 rounded-xl"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteBill}
+                disabled={isDeleteSubmitting}
+                className="px-4 py-2 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 rounded-xl shadow-sm disabled:opacity-50"
+              >
+                {isDeleteSubmitting ? 'Deleting...' : 'Delete Bill'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <SuccessAnimationModal
+        isOpen={successModalConfig.isOpen}
+        title={successModalConfig.title}
+        subtitle={successModalConfig.subtitle}
+        animationType={successModalConfig.animationType || 'contract'}
+        onClose={() => setSuccessModalConfig(prev => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 }
