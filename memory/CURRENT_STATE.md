@@ -6,6 +6,9 @@
 - Direct Supabase document storage integration.
 
 ## 2. Recently Completed
+- **Pushed to GitHub (`durgadevi-spec/hrms`)**:
+  - Commit `01b48d1` pushed to `origin/main` (`https://github.com/durgadevi-spec/hrms.git`) using `navee-n20`.
+  - Staged and pushed dynamic asset category forms, Lottie animations, Supabase direct storage client, and agent memory documentation.
 - **Dynamic Category-Tailored Asset Form Formats**:
   - Automatically adapts the Add & Edit Asset modal fields based on the selected asset type and category:
     1. **ID & Access Cards**: Card/Badge Name, Card/RFID No., Access permissions, Assigned employee, Issue date, Department, Location, Card status, Notes. Hides hardware specs, purchase vendor, invoice, and warranty.
