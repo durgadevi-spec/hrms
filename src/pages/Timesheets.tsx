@@ -4,6 +4,7 @@ import { Calendar, Clock, CheckCircle2, XCircle, FileText, ChevronLeft, ChevronR
 import { api } from '../lib/api';
 import { formatDate, cn } from '../utils/formatters';
 import NoDataAnimation from '../components/common/NoDataAnimation';
+import SearchableEmployeeSelect from '../components/common/SearchableEmployeeSelect';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
 // Helper to parse '1h 27m' into a float
@@ -138,9 +139,31 @@ export default function Timesheets() {
       {/* Employee Detail Modal/View for Admin */}
       {selectedEmployee && (
         <div className="space-y-6">
-          <button onClick={() => setSelectedEmployee(null)} className="btn-ghost flex items-center gap-2 text-secondary-600">
-            <ArrowLeft className="w-4 h-4" /> Back to Organization
-          </button>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <button onClick={() => setSelectedEmployee(null)} className="btn-ghost flex items-center gap-2 text-secondary-600">
+              <ArrowLeft className="w-4 h-4" /> Back to Organization
+            </button>
+            <SearchableEmployeeSelect
+              options={orgData?.employees ? orgData.employees.map((e: any) => ({
+                id: String(e.id),
+                name: e.name || e.employeeCode,
+                code: e.employeeCode,
+                department: e.department,
+              })) : []}
+              value={String(selectedEmployee.id)}
+              onChange={(val) => {
+                if (val === 'all') {
+                  setSelectedEmployee(null);
+                } else {
+                  const emp = orgData?.employees?.find((e: any) => String(e.id) === String(val));
+                  if (emp) setSelectedEmployee(emp);
+                }
+              }}
+              allLabel="Back to All Employees"
+              placeholder="Switch employee..."
+              className="w-full sm:w-72"
+            />
+          </div>
           <div className="card p-6 bg-primary-50/50 dark:bg-primary-900/10 border-primary-100 dark:border-primary-800">
             <h2 className="text-xl font-bold text-secondary-900 dark:text-white">{selectedEmployee.name}</h2>
             <p className="text-sm text-secondary-600 dark:text-surface-400">{selectedEmployee.employeeCode} | {selectedEmployee.department}</p>
@@ -505,7 +528,7 @@ function AdminDashboard({ data, searchQuery, setSearchQuery, setSelectedEmployee
 
   return (
     <div className="space-y-6">
-      {/* Date Picker */}
+      {/* Date Picker & Employee Selector */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="relative">
           <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-secondary-500" />
@@ -516,6 +539,24 @@ function AdminDashboard({ data, searchQuery, setSearchQuery, setSelectedEmployee
             className="input-field pl-9 text-sm font-medium w-full sm:w-auto"
           />
         </div>
+        <SearchableEmployeeSelect
+          options={data.employees ? data.employees.map((e: any) => ({
+            id: String(e.id),
+            name: e.name || e.employeeCode,
+            code: e.employeeCode,
+            department: e.department,
+          })) : []}
+          value="all"
+          onChange={(val) => {
+            if (val !== 'all') {
+              const emp = data.employees?.find((e: any) => String(e.id) === String(val));
+              if (emp) setSelectedEmployee(emp);
+            }
+          }}
+          allLabel="All Employees (Overview)"
+          placeholder="Filter & drill down employee..."
+          className="w-full sm:w-72"
+        />
       </div>
 
       {/* KPI Cards */}

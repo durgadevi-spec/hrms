@@ -87,6 +87,17 @@ export default function JobDetailsForm({ data, errors, onChange }: Props) {
 
       <div className="grid grid-cols-2 gap-4">
         <div>
+          <label className="block text-sm font-medium text-secondary-700 dark:text-surface-300 mb-1.5">Shift Start Time</label>
+          <input type="time" name="shiftStartTime" value={data.shiftStartTime?.slice(0, 5) || ''} onChange={handleChange} className={inputCls('shiftStartTime')} />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-secondary-700 dark:text-surface-300 mb-1.5">Shift End Time</label>
+          <input type="time" name="shiftEndTime" value={data.shiftEndTime?.slice(0, 5) || ''} onChange={handleChange} className={inputCls('shiftEndTime')} />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div>
           <label className="block text-sm font-medium text-secondary-700 dark:text-surface-300 mb-1.5">Employment Status</label>
           <select name="employmentStatus" value={data.employmentStatus || ''} onChange={handleChange} className={inputCls('employmentStatus')}>
             <option value="Active">Active</option>

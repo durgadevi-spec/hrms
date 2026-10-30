@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Search, SortAsc, SortDesc, X, ChevronRight, RefreshCw } from 'lucide-react';
+import { Plus, Search, SortAsc, SortDesc, X, ChevronRight } from 'lucide-react';
 import { useDepartments } from '../context/DepartmentsContext';
 import { formatDate, cn } from '../utils/formatters';
 import type { Role, BloodGroup, MaritalStatus, EducationDetail } from '../types';
@@ -19,50 +19,35 @@ export default function Employees() {
 
   const [employees, setEmployees] = useState<any[]>([]);
   const [leavesData, setLeavesData] = useState<any>({ history: [], lmsUsers: [] });
-  const [isLoadingData, setIsLoadingData] = useState(false);
-  const [isSyncing, setIsSyncing] = useState(false);
+  const [isLoadingData, setIsLoadingData] = useState(true);
 
   const fetchEmployees = async () => {
+    setIsLoadingData(true);
     try {
-      setIsLoadingData(true);
-      const [empData, lvData] = await Promise.all([
-        api.get('/api/employees').catch(() => []),
-        api.get('/api/leave-requests').catch(() => ({ history: [], lmsUsers: [] }))
-      ]);
-      setEmployees(empData);
-      setLeavesData(lvData);
+      const empData = await api.get('/api/employees');
+      setEmployees(Array.isArray(empData) ? empData : []);
     } catch (error) {
-      console.error('Failed to fetch data', error);
+      console.error('Failed to fetch employees', error);
+      setEmployees([]);
     } finally {
       setIsLoadingData(false);
     }
+
+    api.get('/api/leave-requests')
+      .then(lvData => setLeavesData(lvData && typeof lvData === 'object' ? lvData : { history: [], lmsUsers: [] }))
+      .catch(error => console.error('Failed to fetch leave data for employee statuses', error));
   };
 
   useEffect(() => {
     fetchEmployees();
   }, []);
 
-  const handleSyncLMS = async () => {
-    try {
-      setIsSyncing(true);
-      const res = await api.post('/api/admin/seed-lms-employees');
-      alert(res.message || 'Sync complete');
-      if (res.added > 0) {
-        fetchEmployees();
-      }
-    } catch (error: any) {
-      alert(error.message || 'Failed to sync LMS employees');
-    } finally {
-      setIsSyncing(false);
-    }
-  };
-
   const { isAdmin } = useAuth();
   const { departments } = useDepartments();
   const [search, setSearch] = useState('');
   const [sortField, setSortField] = useState<SortField>('firstName');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState<string>('active');
   const [showAddModal, setShowAddModal] = useState(false);
 
   const todayStr = new Date().toLocaleDateString('en-CA');
@@ -155,14 +140,6 @@ export default function Employees() {
         </div>
         {isAdmin && (
           <div className="flex items-center gap-3">
-            <button
-              onClick={handleSyncLMS}
-              disabled={isSyncing}
-              className="btn-secondary"
-            >
-              <RefreshCw className={cn("w-4 h-4", isSyncing && "animate-spin")} />
-              {isSyncing ? 'Syncing...' : 'Sync from LMS'}
-            </button>
             <button onClick={() => setShowAddModal(true)} className="btn-primary">
               <Plus className="w-4 h-4" />
               Add Employee

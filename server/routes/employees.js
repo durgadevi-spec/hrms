@@ -2,6 +2,13 @@ import { Router } from 'express';
 import supabase from '../supabase.js';
 import { sanitizeEmployee } from '../utils.js';
 import authMiddleware, { requireRole } from '../middleware/auth.js';
+import {
+  assertAvailableEverywhere,
+  provisionEverywhere,
+  setActiveEverywhere,
+  deleteEverywhere,
+  DEFAULT_EXTERNAL_PASSWORD,
+} from '../services/employeeSync.js';
 
 const router = Router();
 router.use(authMiddleware);
@@ -186,6 +193,15 @@ router.post('/', requireRole('admin', 'hr'), async (req, res) => {
   const defaultPassword = `${firstName.toLowerCase()}@${employeeId}`;
   const password_hash = await bcrypt.default.hash(defaultPassword, 12);
 
+  // Cross-system check: make sure knockturn.cloud, TimeStrap, PMS and LMS
+  // don't already have this employee BEFORE anything is created anywhere.
+  const fullName = `${firstName} ${lastName}`.trim();
+  try {
+    await assertAvailableEverywhere({ name: fullName, employeeCode: employeeId });
+  } catch (err) {
+    return res.status(err.status || 500).json({ error: err.message });
+  }
+
   // 1. Create employee
   const { data: emp, error: empErr } = await supabase.from('employees').insert({
     official_email: officialEmail.toLowerCase(),
@@ -205,6 +221,37 @@ router.post('/', requireRole('admin', 'hr'), async (req, res) => {
   }).select().single();
 
   if (empErr) return res.status(500).json({ error: empErr.message });
+
+  // 1b. Mirror the new employee into knockturn.cloud, TimeStrap, PMS and LMS.
+  // If any of them fails, undo everything (including the HRMS row) and report.
+  let syncResult;
+  try {
+    let departmentName = null;
+    if (departmentId) {
+      const { data: dept } = await supabase.from('departments').select('name').eq('id', departmentId).maybeSingle();
+      departmentName = dept?.name || null;
+    }
+    syncResult = await provisionEverywhere({
+      hrmsEmployeeId: emp.id,
+      name: fullName,
+      employeeCode: employeeId,
+      // other systems use the shared default (admin123); HRMS keeps its own
+      password: DEFAULT_EXTERNAL_PASSWORD,
+      role: role || 'employee',
+      email: officialEmail,
+      department: departmentName,
+      designation: designation || null,
+      joiningDate: joiningDate || null,
+    });
+  } catch (syncErr) {
+    console.error('[employees] Cross-system provisioning failed, rolling back:', syncErr.message);
+    await supabase.from('employees').delete().eq('id', emp.id);
+    return res.status(syncErr.status || 500).json({
+      error: syncErr.code === '23505'
+        ? 'An employee with one of these details already exists in a connected system'
+        : `Employee was not created: ${syncErr.message}`,
+    });
+  }
 
   // 2. Create job details
   await supabase.from('employee_job_details').insert({
@@ -227,7 +274,7 @@ router.post('/', requireRole('admin', 'hr'), async (req, res) => {
     created_by: req.user.id
   });
 
-  return res.status(201).json(sanitizeEmployee(emp));
+  return res.status(201).json({ ...sanitizeEmployee(emp), sync: syncResult });
 });
 
 // PUT /api/employees/:id/personal
@@ -435,6 +482,22 @@ router.put('/:id/deactivate', requireRole('admin', 'hr'), async (req, res) => {
 
   const targetEmpId = empRes.data ? empRes.data.id : empId;
 
+  // Mirror to knockturn.cloud, TimeStrap, PMS and LMS first. If any of them
+  // fails nothing changes in HRMS, so the action can simply be retried.
+  let syncInfo = null;
+  if (empRes.data?.employee_id) {
+    try {
+      const { data: accessRow } = await supabase.from('employee_system_access').select('login_email').eq('employee_id', targetEmpId).maybeSingle();
+      syncInfo = await setActiveEverywhere({
+        employeeCode: empRes.data.employee_id,
+        email: accessRow?.login_email || empRes.data.official_email,
+        active: false,
+      });
+    } catch (syncErr) {
+      return res.status(syncErr.status || 500).json({ error: syncErr.message });
+    }
+  }
+
   const accessCheck = await supabase
     .from('employee_system_access')
     .select('id')
@@ -472,7 +535,7 @@ router.put('/:id/deactivate', requireRole('admin', 'hr'), async (req, res) => {
   }
 
   const unified = buildUnifiedEmployee(empRes.data, jobRes.data, accessRes.data);
-  return res.json(sanitizeEmployee(unified));
+  return res.json({ ...sanitizeEmployee(unified), sync: syncInfo });
 });
 
 // PUT /api/employees/:id/reactivate
@@ -485,6 +548,22 @@ router.put('/:id/reactivate', requireRole('admin', 'hr'), async (req, res) => {
   }
 
   const targetEmpId = empRes.data ? empRes.data.id : empId;
+
+  // Mirror to knockturn.cloud, TimeStrap, PMS and LMS first. If any of them
+  // fails nothing changes in HRMS, so the action can simply be retried.
+  let syncInfo = null;
+  if (empRes.data?.employee_id) {
+    try {
+      const { data: accessRow } = await supabase.from('employee_system_access').select('login_email').eq('employee_id', targetEmpId).maybeSingle();
+      syncInfo = await setActiveEverywhere({
+        employeeCode: empRes.data.employee_id,
+        email: accessRow?.login_email || empRes.data.official_email,
+        active: true,
+      });
+    } catch (syncErr) {
+      return res.status(syncErr.status || 500).json({ error: syncErr.message });
+    }
+  }
 
   const accessCheck = await supabase
     .from('employee_system_access')
@@ -523,7 +602,68 @@ router.put('/:id/reactivate', requireRole('admin', 'hr'), async (req, res) => {
   }
 
   const unified = buildUnifiedEmployee(empRes.data, jobRes.data, accessRes.data);
-  return res.json(sanitizeEmployee(unified));
+  return res.json({ ...sanitizeEmployee(unified), sync: syncInfo });
+});
+
+// DELETE /api/employees/:id  (admin only)
+// Permanently removes the employee from HRMS AND from knockturn.cloud,
+// TimeStrap, PMS and LMS. Other systems are cleaned first (idempotent), so if
+// one is unreachable nothing is deleted in HRMS and the action can be retried.
+router.delete('/:id', requireRole('admin'), async (req, res) => {
+  try {
+    const empId = req.params.id;
+
+    let empRes = await supabase.from('employees').select('*').eq('id', empId).maybeSingle();
+    if (!empRes.data) {
+      empRes = await supabase.from('employees').select('*').eq('employee_id', empId).maybeSingle();
+    }
+    const emp = empRes.data;
+    if (!emp) return res.status(404).json({ error: 'Employee not found' });
+
+    if (emp.id === req.user.id) {
+      return res.status(400).json({ error: 'You cannot delete your own account' });
+    }
+
+    const { data: accessRow } = await supabase
+      .from('employee_system_access').select('login_email').eq('employee_id', emp.id).maybeSingle();
+
+    // 1. Other systems
+    const sync = await deleteEverywhere({
+      employeeCode: emp.employee_id,
+      email: accessRow?.login_email || emp.official_email,
+    });
+
+    // 2. HRMS clean-up of things that point at this employee
+    await supabase.from('employee_job_details').update({ reporting_manager_id: null }).eq('reporting_manager_id', emp.id);
+
+    const { data: managedDepts } = await supabase.from('departments').select('id, manager_ids').contains('manager_ids', [emp.id]);
+    for (const d of managedDepts || []) {
+      await supabase.from('departments')
+        .update({ manager_ids: (d.manager_ids || []).filter((m) => m !== emp.id) })
+        .eq('id', d.id);
+    }
+
+    // Assets assigned to this employee become available again
+    const { data: heldAssets } = await supabase
+      .from('employee_assets').select('asset_id').eq('employee_id', emp.id).eq('status', 'Assigned');
+    const heldIds = (heldAssets || []).map((a) => a.asset_id).filter(Boolean);
+    if (heldIds.length) {
+      await supabase.from('assets').update({ status: 'Available', updated_at: new Date().toISOString() }).in('id', heldIds);
+    }
+
+    // 3. The employee itself (profile, job, salary, access, etc. cascade)
+    const { error: delErr } = await supabase.from('employees').delete().eq('id', emp.id);
+    if (delErr) {
+      return res.status(500).json({
+        error: `Removed from other systems but HRMS delete failed: ${delErr.message}. Try again.`,
+      });
+    }
+
+    return res.json({ success: true, employeeId: emp.employee_id, sync });
+  } catch (err) {
+    console.error('[employees] Delete everywhere failed:', err);
+    return res.status(err.status || 500).json({ error: err.message || 'Failed to delete employee' });
+  }
 });
 
 export default router;

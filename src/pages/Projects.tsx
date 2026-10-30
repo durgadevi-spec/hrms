@@ -7,6 +7,7 @@ import {
 import { api } from '../lib/api';
 import { formatDate, cn } from '../utils/formatters';
 import NoDataAnimation from '../components/common/NoDataAnimation';
+import SearchableEmployeeSelect from '../components/common/SearchableEmployeeSelect';
 
 interface Project {
   id: string;
@@ -168,14 +169,17 @@ export default function Projects() {
           <option value="cancelled">Cancelled</option>
         </select>
         {isAdmin && (
-          <select value={employeeFilter} onChange={e => setEmployeeFilter(e.target.value)} className="input-field w-full sm:w-48 text-sm">
-            <option value="all">All Employees</option>
-            {employees.map(emp => (
-              <option key={emp.id} value={emp.id}>
-                {emp.firstName} {emp.lastName}
-              </option>
-            ))}
-          </select>
+          <SearchableEmployeeSelect
+            options={employees.filter(emp => (emp.status || '').toLowerCase() === 'active').map(emp => ({
+              id: String(emp.id),
+              name: `${emp.firstName || ''} ${emp.lastName || ''}`.trim() || emp.employeeId,
+              code: emp.employeeId,
+            }))}
+            value={employeeFilter}
+            onChange={setEmployeeFilter}
+            allLabel="All Employees"
+            className="w-full sm:w-56"
+          />
         )}
         <div className="flex bg-surface-100 dark:bg-surface-800 rounded-lg p-1">
           <button

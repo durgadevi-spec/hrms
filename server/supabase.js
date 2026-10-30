@@ -1,7 +1,7 @@
 import pkg from '@supabase/supabase-js';
 const { createClient } = pkg;
 import * as dotenv from 'dotenv';
-dotenv.config();
+dotenv.config({ override: true });
 
 const supabaseAdmin = createClient(
   process.env.SUPABASE_URL,

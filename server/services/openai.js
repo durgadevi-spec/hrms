@@ -1,7 +1,7 @@
 import OpenAI from 'openai';
 import supabase from '../supabase.js';
 import * as dotenv from 'dotenv';
-dotenv.config();
+dotenv.config({ override: true });
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || 'mock-key'

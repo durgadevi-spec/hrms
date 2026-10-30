@@ -52,6 +52,8 @@ export interface Employee {
   joiningDate: string;
   reportingManagerId: string | null;
   reportingManager?: Employee | null;
+  shiftStartTime: string | null;
+  shiftEndTime: string | null;
   profileImageUrl: string | null;
   paidLeaveBalance: number;
   sickLeaveBalance: number;

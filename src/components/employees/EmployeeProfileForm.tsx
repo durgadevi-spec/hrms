@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import {
   User, Briefcase, DollarSign, GraduationCap,
-  Activity, HeartPulse, Paperclip, Laptop,
-  ChevronRight, ChevronLeft, Save, CheckCircle, X
+  Activity, HeartPulse, Paperclip, Laptop, Loader2, AlertCircle,
+  ChevronRight, ChevronLeft, Save, CheckCircle, X, Maximize2, Minimize2
 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useAuth } from '../../context/AuthContext';
@@ -116,15 +117,21 @@ export default function EmployeeProfileForm({ initialData, onClose, onSaved }: E
   const [errors, setErrors] = useState<Record<string, any>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'draft' | 'saved' | 'error'>('idle');
+  const [savingAction, setSavingAction] = useState<'draft' | 'complete' | null>(null);
+  const [saveMessage, setSaveMessage] = useState('');
+  const saveInProgress = useRef(false);
   const [createdEmpId, setCreatedEmpId] = useState<string | null>(null);
   const [failedSections, setFailedSections] = useState<string[]>([]);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [isFullScreen, setIsFullScreen] = useState(false);
 
   // Calculate progress
   const progress = Math.round(((activeStep + 1) / sections.length) * 100);
 
   const updateSectionData = (section: keyof FormState, data: any) => {
     setFormData(prev => ({ ...prev, [section]: data }));
+    setSaveStatus('idle');
+    setSaveMessage('');
     // Clear errors for this section
     setErrors(prev => ({ ...prev, [section]: null }));
   };
@@ -165,11 +172,15 @@ export default function EmployeeProfileForm({ initialData, onClose, onSaved }: E
   };
 
   const handleSave = async (isDraft = true) => {
+    if (saveInProgress.current) return;
     // Drafts don't require full validation of current step, but final submit does
     if (!isDraft && !validateCurrentStep()) return;
 
+    saveInProgress.current = true;
     setIsSaving(true);
+    setSavingAction(isDraft ? 'draft' : 'complete');
     setSaveStatus('idle');
+    setSaveMessage(isDraft ? 'Saving draft...' : 'Saving complete profile...');
     const errors: string[] = [];
 
     try {
@@ -285,6 +296,8 @@ export default function EmployeeProfileForm({ initialData, onClose, onSaved }: E
             employment_type: formData.job.employmentType,
             employment_status: formData.job.employmentStatus || 'Active',
             work_location: formData.job.workLocation,
+            shift_start_time: formData.job.shiftStartTime || null,
+            shift_end_time: formData.job.shiftEndTime || null,
             role: formData.job.role,
           };
           await api.put(`/api/employees/${empId}/job`, jobPayload);
@@ -485,6 +498,7 @@ export default function EmployeeProfileForm({ initialData, onClose, onSaved }: E
       if (errors.length > 0) {
         console.warn('[Save] Partial save - failed sections:', errors);
         setSaveStatus('error');
+        setSaveMessage('Some sections could not be saved. Review the error details and try again.');
         alert(
           'Some sections could not be saved:\n\n' +
           errors.join('\n') +
@@ -492,6 +506,7 @@ export default function EmployeeProfileForm({ initialData, onClose, onSaved }: E
         );
       } else {
         setSaveStatus(isDraft ? 'draft' : 'saved');
+        setSaveMessage(isDraft ? 'Draft saved successfully.' : 'Profile saved successfully.');
       }
 
       // Only auto-close on a fully clean save. If something failed, keep the
@@ -503,24 +518,34 @@ export default function EmployeeProfileForm({ initialData, onClose, onSaved }: E
         } else {
           setTimeout(() => {
             onSaved();
-          }, 1200);
+          }, 1800);
         }
       }
     } catch (err: any) {
       console.error('[Save] Critical error (employee creation failed):', err);
       setSaveStatus('error');
+      setSaveMessage(err.message || 'Failed to save the profile. Please try again.');
       alert(err.message || 'Failed to save');
     } finally {
       setIsSaving(false);
+      setSavingAction(null);
+      saveInProgress.current = false;
     }
   };
 
   const CurrentIcon = sections[activeStep].icon;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <>
+    {createPortal(
+    <div className={cn('fixed inset-0 z-[60] flex items-center justify-center', isFullScreen ? 'p-0' : 'p-4')}>
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-6xl h-[90vh] bg-white dark:bg-surface-900 rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-scale-in border border-surface-200 dark:border-surface-800">
+      <div className={cn(
+        'relative w-full bg-white dark:bg-surface-900 shadow-2xl flex flex-col overflow-hidden animate-scale-in border border-surface-200 dark:border-surface-800',
+        isFullScreen
+          ? 'max-w-none w-screen h-[100dvh] min-h-0 rounded-none border-0 shadow-none animate-none'
+          : 'max-w-6xl h-[90vh] rounded-2xl'
+      )}>
 
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-surface-200 dark:border-surface-800 bg-surface-50 dark:bg-surface-800/50">
@@ -531,12 +556,21 @@ export default function EmployeeProfileForm({ initialData, onClose, onSaved }: E
             <p className="text-sm text-secondary-500 mt-1">Complete all sections to create a comprehensive profile.</p>
           </div>
           <div className="flex items-center gap-4">
-            {saveStatus === 'draft' && <span className="text-sm text-primary-600 font-medium flex items-center gap-1.5"><CheckCircle className="w-4 h-4" /> Draft saved</span>}
+            {(saveStatus === 'draft' || saveStatus === 'saved') && <span className="text-sm text-primary-600 font-medium flex items-center gap-1.5"><CheckCircle className="w-4 h-4" /> {saveStatus === 'draft' ? 'Draft saved' : 'Profile saved'}</span>}
             {saveStatus === 'error' && failedSections.length > 0 && (
               <span className="text-sm text-error-600 font-medium max-w-xs text-right">
                 Failed to save: {failedSections.map(f => f.split(':')[0]).join(', ')}
               </span>
             )}
+            <button
+              type="button"
+              onClick={() => setIsFullScreen(fullScreen => !fullScreen)}
+              aria-label={isFullScreen ? 'Exit full screen' : 'Enter full screen'}
+              title={isFullScreen ? 'Exit full screen' : 'Full screen'}
+              className="p-2 rounded-lg hover:bg-surface-200 dark:hover:bg-surface-700 text-secondary-500 transition-colors"
+            >
+              {isFullScreen ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
+            </button>
             <button onClick={onClose} className="p-2 rounded-lg hover:bg-surface-200 dark:hover:bg-surface-700 text-secondary-500 transition-colors">
               <X className="w-5 h-5" />
             </button>
@@ -645,14 +679,35 @@ export default function EmployeeProfileForm({ initialData, onClose, onSaved }: E
             </div>
 
             {/* Footer / Controls */}
-            <div className="px-8 py-5 border-t border-surface-200 dark:border-surface-800 bg-surface-50 dark:bg-surface-800/50 flex items-center justify-between flex-shrink-0">
+            <div className="px-8 py-5 border-t border-surface-200 dark:border-surface-800 bg-surface-50 dark:bg-surface-800/50 flex flex-wrap items-center justify-between gap-4 flex-shrink-0">
               <button
                 onClick={() => handleSave(true)}
                 disabled={isSaving}
-                className="btn-secondary flex items-center gap-2"
+                className="btn-secondary flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                <Save className="w-4 h-4" /> Save as Draft
+                {isSaving && savingAction === 'draft'
+                  ? <Loader2 className="w-4 h-4 animate-spin" />
+                  : <Save className="w-4 h-4" />}
+                {isSaving && savingAction === 'draft' ? 'Saving draft...' : 'Save as Draft'}
               </button>
+
+              <div aria-live="polite" role={saveStatus === 'error' ? 'alert' : 'status'} className={cn(
+                'order-last w-full text-center text-sm font-medium sm:order-none sm:w-auto sm:flex-1',
+                saveStatus === 'error' ? 'text-error-600' :
+                  isSaving ? 'text-primary-600' :
+                    saveStatus === 'draft' || saveStatus === 'saved' ? 'text-success-600' : 'text-secondary-500'
+              )}>
+                {saveMessage && (
+                  <span className="inline-flex items-center gap-1.5">
+                    {saveStatus === 'error'
+                      ? <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                      : isSaving
+                        ? <Loader2 className="h-4 w-4 flex-shrink-0 animate-spin" />
+                        : <CheckCircle className="h-4 w-4 flex-shrink-0" />}
+                    {saveMessage}
+                  </span>
+                )}
+              </div>
 
               <div className="flex gap-3">
                 <button
@@ -665,10 +720,15 @@ export default function EmployeeProfileForm({ initialData, onClose, onSaved }: E
                 <button
                   onClick={handleNext}
                   disabled={isSaving}
-                  className="btn-primary px-8"
+                  className="btn-primary px-8 disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   {activeStep === sections.length - 1 ? (
-                    <>{isSaving ? 'Saving...' : 'Complete Profile'} <CheckCircle className="w-4 h-4 ml-1" /></>
+                    <span className="flex items-center">
+                      {isSaving && savingAction === 'complete'
+                        ? <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                        : <CheckCircle className="w-4 h-4 mr-1" />}
+                      {isSaving && savingAction === 'complete' ? 'Saving profile...' : 'Complete Profile'}
+                    </span>
                   ) : (
                     <>Next <ChevronRight className="w-4 h-4 ml-1" /></>
                   )}
@@ -678,6 +738,8 @@ export default function EmployeeProfileForm({ initialData, onClose, onSaved }: E
           </div>
         </div>
       </div>
+    </div>
+    , document.body)}
 
       <SuccessAnimationModal
         isOpen={showSuccessModal}
@@ -688,6 +750,6 @@ export default function EmployeeProfileForm({ initialData, onClose, onSaved }: E
           onSaved();
         }}
       />
-    </div>
+    </>
   );
 }

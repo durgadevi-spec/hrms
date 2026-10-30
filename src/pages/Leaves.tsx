@@ -3,6 +3,7 @@ import { Calendar, Check, X, Clock, Sun, Coffee, FileText, AlertCircle, Search, 
 import { api } from '../lib/api';
 import { formatDate, cn } from '../utils/formatters';
 import NoDataAnimation from '../components/common/NoDataAnimation';
+import SearchableEmployeeSelect from '../components/common/SearchableEmployeeSelect';
 
 function toLocalDateKey(dateInput: string | Date | null | undefined): string {
   if (!dateInput) return '';
@@ -101,14 +102,26 @@ export default function Leaves() {
   // Unique employees present in the leave/permission data, for the
   // employee-wise filter dropdown.
   const employeeOptions = useMemo(() => {
+    // Filter out inactive employees from dropdown
+    const inactiveUserIds = new Set<string>();
+    lmsUsers.forEach((u: any) => {
+      if (!u.userId) return;
+      const email = (u.email || '').toLowerCase().trim();
+      const emp = email ? employees.find((e: any) => (e.email || '').toLowerCase().trim() === email) : null;
+      if (emp && (emp.status || '').toLowerCase() === 'inactive') {
+        inactiveUserIds.add(u.userId);
+      }
+    });
+
     const ids = new Set<string>([
       ...history.map((l: any) => l.userId),
       ...permissions.map((p: any) => p.userId)
     ].filter(Boolean));
     return Array.from(ids)
+      .filter(id => !inactiveUserIds.has(id))
       .map(id => ({ id, name: getEmployeeName(id) }))
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [history, permissions, employeeNameByUserId]);
+  }, [history, permissions, employeeNameByUserId, lmsUsers, employees]);
 
   const myBalance = balances[0] || { casualTotal: 0, casualUsed: 0, sickTotal: 0, sickUsed: 0 };
 
@@ -391,16 +404,16 @@ export default function Leaves() {
                 </div>
                 {isLmsAdmin && (
                   <div className="flex items-center gap-2 w-full sm:w-auto">
-                    <select
+                    <SearchableEmployeeSelect
+                      options={employeeOptions.map(o => ({
+                        id: String(o.id),
+                        name: o.name,
+                      }))}
                       value={employeeFilter}
-                      onChange={e => setEmployeeFilter(e.target.value)}
-                      className="input-field text-sm w-full sm:w-52"
-                    >
-                      <option value="all">All Employees</option>
-                      {employeeOptions.map(o => (
-                        <option key={o.id} value={o.id}>{o.name}</option>
-                      ))}
-                    </select>
+                      onChange={setEmployeeFilter}
+                      allLabel="All Employees"
+                      className="w-full sm:w-60"
+                    />
                     <div className="relative w-full sm:w-72">
                       <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-secondary-400" />
                       <input type="text" placeholder="Search Emp ID, Name..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="input-field pl-9 text-sm w-full" />
@@ -486,16 +499,16 @@ export default function Leaves() {
                 </div>
                 {isLmsAdmin && (
                   <div className="flex items-center gap-2 w-full sm:w-auto">
-                    <select
+                    <SearchableEmployeeSelect
+                      options={employeeOptions.map(o => ({
+                        id: String(o.id),
+                        name: o.name,
+                      }))}
                       value={employeeFilter}
-                      onChange={e => setEmployeeFilter(e.target.value)}
-                      className="input-field text-sm w-full sm:w-52"
-                    >
-                      <option value="all">All Employees</option>
-                      {employeeOptions.map(o => (
-                        <option key={o.id} value={o.id}>{o.name}</option>
-                      ))}
-                    </select>
+                      onChange={setEmployeeFilter}
+                      allLabel="All Employees"
+                      className="w-full sm:w-60"
+                    />
                     <div className="relative w-full sm:w-72">
                       <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-secondary-400" />
                       <input type="text" placeholder="Search Emp ID, Name..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="input-field pl-9 text-sm w-full" />

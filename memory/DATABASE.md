@@ -11,6 +11,7 @@
 | Table Name | Purpose | Primary Fields & Types |
 | :--- | :--- | :--- |
 | **`employees`** | Organizational staff catalog & auth credentials | `id` (UUID), `first_name`, `last_name`, `email` (UNIQUE), `password_hash`, `role` (`admin`/`hr`/`manager`/`it_support`/`employee`), `status` (`Active`/`Inactive`/`on_leave`), `department_id`, `employee_id` (e.g. `EMP0042`), `designation`, `salary`, `joining_date`, `emergency_contacts` (JSONB) |
+| **`employee_job_details`** | Employee job and schedule information | Includes `shift_start_time` and `shift_end_time` (`TIME`) in addition to the existing `shift` label |
 | **`departments`** | Company functional divisions | `id` (UUID), `name`, `description`, `manager_ids` (TEXT[] / JSONB), `created_at` |
 | **`assets`** | Hardware, IT devices, furniture, and cards | `id` (UUID), `name`, `asset_type`, `category`, `asset_code`, `serial_number`, `brand`, `model`, `processor`, `ram`, `storage_type`, `storage_capacity`, `operating_system`, `graphics_card`, `display_size`, `purchase_date`, `purchase_cost`, `vendor`, `invoice_number`, `warranty_start_date`, `warranty_end_date`, `location`, `department`, `description`, `status` (`available`/`assigned`/`maintenance`/`damaged`/`retired`), `documents` (JSONB array of `{ name, size, type, url }`), `mobile_number` |
 | **`asset_assignments`** | Custody check-out & check-in history | `id` (UUID), `asset_id` (FK), `employee_id` (FK), `assigned_at`, `returned_at`, `notes` |

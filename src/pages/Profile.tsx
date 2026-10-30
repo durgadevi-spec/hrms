@@ -6,9 +6,9 @@ import {
   Mail, Phone, MapPin, Calendar, Building2, Users,
   GraduationCap, Heart, Globe, Droplets, AlertTriangle, UserX,
   Package, CheckCircle2,
-  Clock, UserCheck, X, Shield, ArrowLeft, Edit2, ChevronRight,
+  Clock, UserCheck, X, Shield, ArrowLeft, Edit2, Eye, ChevronRight,
   Plus, RotateCcw, Crown, Save, Briefcase, Award, Activity,
-  FileText, TrendingUp, Star, User
+  FileText, TrendingUp, Star, User, Trash2
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { formatDate, cn } from '../utils/formatters';
@@ -66,6 +66,7 @@ const getAssetTypeStyle = (typeName: string, assetTypes: any[]) => {
 };
 
 import EmployeeProfileForm from '../components/employees/EmployeeProfileForm';
+import EmployeeDetailsModal from '../components/employees/EmployeeDetailsModal';
 
 // ─── Assign Asset Modal ───────────────────────────────────────────────────────
 function AssignAssetModal({ employeeId, employeeName, onClose, onAssigned }: { employeeId: string; employeeName: string; onClose: () => void; onAssigned?: () => void }) {
@@ -179,12 +180,12 @@ function ReturnAssetModal({ assetName, assignmentId, onClose }: { assetName: str
 }
 
 // ─── Deactivate Modal ─────────────────────────────────────────────────────────
-function DeactivateModal({ employeeName, onClose, onConfirm }: { employeeName: string; onClose: () => void; onConfirm: (r: string) => void }) {
+function DeactivateModal({ employeeName, onClose, onConfirm, busy = false }: { employeeName: string; onClose: () => void; onConfirm: (r: string) => void; busy?: boolean }) {
   const [reason, setReason] = useState('');
   const [error, setError] = useState('');
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={busy ? undefined : onClose} />
       <div className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden border border-secondary-100">
         <div className="flex items-center gap-3 px-6 py-4 border-b border-error-100 bg-error-50">
           <div className="w-10 h-10 rounded-xl bg-error-100 flex items-center justify-center"><UserX className="w-5 h-5 text-error-600" /></div>
@@ -202,8 +203,40 @@ function DeactivateModal({ employeeName, onClose, onConfirm }: { employeeName: s
           </div>
         </div>
         <div className="flex gap-3 px-6 py-4 border-t border-secondary-100 bg-secondary-50">
-          <button onClick={onClose} className="flex-1 px-4 py-2 rounded-xl border border-secondary-200 text-sm font-semibold text-secondary-700 hover:bg-secondary-100 transition-colors">Cancel</button>
-          <button onClick={() => { if (!reason.trim()) { setError('Reason required'); return; } onConfirm(reason); }} className="flex-1 px-4 py-2 rounded-xl bg-error-600 hover:bg-error-700 text-white text-sm font-semibold flex items-center justify-center gap-1.5 transition-colors"><UserX className="w-3.5 h-3.5" /> Deactivate</button>
+          <button onClick={onClose} disabled={busy} className="flex-1 px-4 py-2 rounded-xl border border-secondary-200 text-sm font-semibold text-secondary-700 hover:bg-secondary-100 transition-colors disabled:opacity-50">Cancel</button>
+          <button disabled={busy} onClick={() => { if (!reason.trim()) { setError('Reason required'); return; } onConfirm(reason); }} className="flex-1 px-4 py-2 rounded-xl bg-error-600 hover:bg-error-700 text-white text-sm font-semibold flex items-center justify-center gap-1.5 transition-colors disabled:opacity-70 disabled:cursor-not-allowed">{busy ? <><span className="inline-block w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Deactivating...</> : <><UserX className="w-3.5 h-3.5" /> Deactivate</>}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Delete Modal ─────────────────────────────────────────────────────────────
+function DeleteEmployeeModal({ employeeName, employeeCode, onClose, onConfirm }: { employeeName: string; employeeCode: string; onClose: () => void; onConfirm: () => Promise<void> }) {
+  const [typed, setTyped] = useState('');
+  const [busy, setBusy] = useState(false);
+  const matches = typed.trim().toLowerCase() === String(employeeCode || '').trim().toLowerCase();
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={busy ? undefined : onClose} />
+      <div className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden border border-secondary-100">
+        <div className="flex items-center gap-3 px-6 py-4 border-b border-error-100 bg-error-50">
+          <div className="w-10 h-10 rounded-xl bg-error-100 flex items-center justify-center"><Trash2 className="w-5 h-5 text-error-600" /></div>
+          <div><h2 className="text-sm font-bold text-secondary-900">Delete Employee</h2><p className="text-xs text-secondary-500">Permanently remove {employeeName} everywhere</p></div>
+        </div>
+        <div className="p-6 space-y-4">
+          <div className="flex items-start gap-2.5 p-3.5 bg-error-50 rounded-xl border border-error-100">
+            <AlertTriangle className="w-4 h-4 text-error-500 mt-0.5 flex-shrink-0" />
+            <p className="text-xs text-error-700 leading-relaxed">This deletes the employee from HRMS, knockturn.cloud, TimeStrap, PMS and LMS. This cannot be undone. To keep the data and only block login, use Deactivate instead.</p>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-secondary-600 mb-1.5">Type the employee ID <span className="font-bold">{employeeCode}</span> to confirm</label>
+            <input value={typed} onChange={e => setTyped(e.target.value)} disabled={busy} className="w-full px-3.5 py-2.5 rounded-xl border border-secondary-200 text-sm text-secondary-900 focus:outline-none focus:ring-2 focus:ring-error-400/20 focus:border-error-400" />
+          </div>
+        </div>
+        <div className="flex gap-3 px-6 py-4 border-t border-secondary-100 bg-secondary-50">
+          <button onClick={onClose} disabled={busy} className="flex-1 px-4 py-2 rounded-xl border border-secondary-200 text-sm font-semibold text-secondary-700 hover:bg-secondary-100 transition-colors disabled:opacity-50">Cancel</button>
+          <button disabled={!matches || busy} onClick={async () => { setBusy(true); try { await onConfirm(); } finally { setBusy(false); } }} className="flex-1 px-4 py-2 rounded-xl bg-error-600 hover:bg-error-700 text-white text-sm font-semibold flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"><Trash2 className="w-3.5 h-3.5" /> {busy ? 'Deleting...' : 'Delete everywhere'}</button>
         </div>
       </div>
     </div>
@@ -229,8 +262,12 @@ export default function Profile() {
   const [activeTab, setActiveTab] = useState<'info' | 'qualifications' | 'activity'>('info');
   const [infoSubTab, setInfoSubTab] = useState<'basic' | 'emergency'>('basic');
   const [showEdit, setShowEdit] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
   const [showDeactivate, setShowDeactivate] = useState(false);
   const [showReactivate, setShowReactivate] = useState(false);
+  const [showDelete, setShowDelete] = useState(false);
+  const [isDeactivating, setIsDeactivating] = useState(false);
+  const [isReactivating, setIsReactivating] = useState(false);
   const [showAssignAsset, setShowAssignAsset] = useState(false);
   const [returnTarget, setReturnTarget] = useState<{ assignmentId: string; assetName: string } | null>(null);
   const [feedbackModal, setFeedbackModal] = useState<{
@@ -320,8 +357,10 @@ export default function Profile() {
     setEmployeeData(updated);
   };
   const handleDeactivate = async (reason: string) => {
+    setIsDeactivating(true);
     try {
       const u = await api.put(`/api/employees/${employeeData.id}/deactivate`, { reason });
+      if (u?.sync?.notFound?.length) alert(`Heads up: no matching employee was found in ${u.sync.notFound.join(', ')}, so nothing was deactivated there. Check the employee code/email in that system.`);
       setEmployeeData((prev: any) => ({ ...prev, ...u, status: 'Inactive' }));
       setShowDeactivate(false);
       fetchData();
@@ -333,11 +372,15 @@ export default function Profile() {
       });
     } catch (err: any) {
       alert(err.message);
+    } finally {
+      setIsDeactivating(false);
     }
   };
   const handleReactivate = async () => {
+    setIsReactivating(true);
     try {
       const u = await api.put(`/api/employees/${employeeData.id}/reactivate`);
+      if (u?.sync?.notFound?.length) alert(`Heads up: no matching employee was found in ${u.sync.notFound.join(', ')}, so nothing was reactivated there. Check the employee code/email in that system.`);
       setEmployeeData((prev: any) => ({ ...prev, ...u, status: 'Active' }));
       setShowReactivate(false);
       fetchData();
@@ -346,6 +389,23 @@ export default function Profile() {
         title: 'Account Reactivated!',
         subtitle: `${employeeData.firstName} ${employeeData.lastName}'s login access has been successfully restored.`,
         animationType: 'tick',
+      });
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setIsReactivating(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    try {
+      await api.delete(`/api/employees/${employeeData.id}`);
+      setShowDelete(false);
+      setFeedbackModal({
+        isOpen: true,
+        title: 'Employee Deleted',
+        subtitle: `${employeeData.firstName} ${employeeData.lastName} has been removed from HRMS, knockturn.cloud, TimeStrap, PMS and LMS.`,
+        animationType: 'delete',
       });
     } catch (err: any) {
       alert(err.message);
@@ -470,6 +530,12 @@ export default function Profile() {
                   <Calendar className="w-4 h-4 text-secondary-400 flex-shrink-0" />
                   <span className="text-secondary-500 text-xs">Joined {formatDate(employeeData.joiningDate)}</span>
                 </div>
+                <div className="flex items-center gap-2.5 text-sm">
+                  <Clock className="w-4 h-4 text-secondary-400 flex-shrink-0" />
+                  <span className="text-secondary-500 text-xs">
+                    Shift {employeeData.shiftStartTime?.slice(0, 5) || '—'} – {employeeData.shiftEndTime?.slice(0, 5) || '—'}
+                  </span>
+                </div>
                 {employeeData.address && (
                   <div className="flex items-start gap-2.5 text-sm">
                     <MapPin className="w-4 h-4 text-secondary-400 flex-shrink-0 mt-0.5" />
@@ -499,6 +565,11 @@ export default function Profile() {
               <UserX className="w-4 h-4" /> Deactivate Employee
             </button>
           )}
+          {isAdmin && (
+            <button onClick={() => setShowDelete(true)} className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-error-600 text-white text-sm font-semibold hover:bg-error-700 transition-colors">
+              <Trash2 className="w-4 h-4" /> Delete Employee
+            </button>
+          )}
         </div>
 
 
@@ -522,11 +593,16 @@ export default function Profile() {
                     {employeeData.mobileNumber && <p className="text-xs text-secondary-500 mt-0.5"><Phone className="w-3 h-3 inline mr-1" />{employeeData.mobileNumber}</p>}
                     <p className="text-xs text-secondary-500 mt-0.5"><Mail className="w-3 h-3 inline mr-1" />{employeeData.email}</p>
                   </div>
-                  {isAdmin && (
-                    <button onClick={() => setShowEdit(true)} className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-primary-600 hover:bg-primary-700 text-white text-xs font-semibold transition-colors shadow-sm">
-                      <Edit2 className="w-3.5 h-3.5" /> Edit Info
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => setShowDetails(true)} className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-secondary-200 text-secondary-700 hover:bg-secondary-50 text-xs font-semibold transition-colors">
+                      <Eye className="w-3.5 h-3.5" /> View Details
                     </button>
-                  )}
+                    {isAdmin && (
+                      <button onClick={() => setShowEdit(true)} className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-primary-600 hover:bg-primary-700 text-white text-xs font-semibold transition-colors shadow-sm">
+                        <Edit2 className="w-3.5 h-3.5" /> Edit Info
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4 mb-6">
@@ -862,6 +938,8 @@ export default function Profile() {
                 employmentStatus: employeeData.status,
                 employmentType: employeeData.employmentType,
                 workLocation: employeeData.workLocation,
+                shiftStartTime: employeeData.shiftStartTime,
+                shiftEndTime: employeeData.shiftEndTime,
               },
               salary: employeeData.salaryDetails || {},
               education: employeeData.education || [],
@@ -885,20 +963,32 @@ export default function Profile() {
         );
       })()}
 
-      {showDeactivate && <DeactivateModal employeeName={employeeData.firstName + ' ' + employeeData.lastName} onClose={() => setShowDeactivate(false)} onConfirm={handleDeactivate} />}
+      {showDetails && (
+        <EmployeeDetailsModal
+          employee={employeeData}
+          departmentName={department?.name}
+          managerName={manager ? `${manager.firstName} ${manager.lastName}` : undefined}
+          emergencyContacts={emergencyContactsList}
+          assets={employeeAssets}
+          onClose={() => setShowDetails(false)}
+        />
+      )}
+
+      {showDelete && <DeleteEmployeeModal employeeName={employeeData.firstName + ' ' + employeeData.lastName} employeeCode={employeeData.employeeId} onClose={() => setShowDelete(false)} onConfirm={handleDelete} />}
+      {showDeactivate && <DeactivateModal employeeName={employeeData.firstName + ' ' + employeeData.lastName} onClose={() => setShowDeactivate(false)} onConfirm={handleDeactivate} busy={isDeactivating} />}
       {showAssignAsset && <AssignAssetModal employeeId={employeeData.id} employeeName={employeeData.firstName + ' ' + employeeData.lastName} onClose={() => setShowAssignAsset(false)} onAssigned={fetchData} />}
       {returnTarget && <ReturnAssetModal assetName={returnTarget.assetName} assignmentId={returnTarget.assignmentId} onClose={() => setReturnTarget(null)} />}
 
       {showReactivate && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowReactivate(false)} />
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => !isReactivating && setShowReactivate(false)} />
           <div className="relative w-full max-w-sm bg-white rounded-2xl shadow-2xl p-7 text-center border border-secondary-100">
             <div className="w-14 h-14 rounded-xl bg-accent-100 flex items-center justify-center mx-auto mb-4"><UserCheck className="w-7 h-7 text-accent-600" /></div>
             <h2 className="text-base font-bold text-secondary-900 mb-2">Reactivate Account</h2>
             <p className="text-sm text-secondary-500 mb-6">Restore {employeeData.firstName}'s login access and mark as active.</p>
             <div className="flex gap-3">
-              <button onClick={() => setShowReactivate(false)} className="flex-1 px-4 py-2.5 rounded-xl border border-secondary-200 text-sm font-semibold text-secondary-700 hover:bg-secondary-50 transition-colors">Cancel</button>
-              <button onClick={handleReactivate} className="flex-1 px-4 py-2.5 rounded-xl bg-accent-600 hover:bg-accent-700 text-white text-sm font-semibold flex items-center justify-center gap-2 transition-colors shadow-sm"><UserCheck className="w-4 h-4" /> Reactivate</button>
+              <button onClick={() => setShowReactivate(false)} disabled={isReactivating} className="flex-1 px-4 py-2.5 rounded-xl border border-secondary-200 text-sm font-semibold text-secondary-700 hover:bg-secondary-50 transition-colors disabled:opacity-50">Cancel</button>
+              <button onClick={handleReactivate} disabled={isReactivating} className="flex-1 px-4 py-2.5 rounded-xl bg-accent-600 hover:bg-accent-700 text-white text-sm font-semibold flex items-center justify-center gap-2 transition-colors shadow-sm disabled:opacity-70 disabled:cursor-not-allowed">{isReactivating ? <><span className="inline-block w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Reactivating...</> : <><UserCheck className="w-4 h-4" /> Reactivate</>}</button>
             </div>
           </div>
         </div>
@@ -909,7 +999,11 @@ export default function Profile() {
         title={feedbackModal.title}
         subtitle={feedbackModal.subtitle}
         animationType={feedbackModal.animationType}
-        onClose={() => setFeedbackModal(prev => ({ ...prev, isOpen: false }))}
+        onClose={() => {
+          const wasDelete = feedbackModal.animationType === 'delete';
+          setFeedbackModal(prev => ({ ...prev, isOpen: false }));
+          if (wasDelete) navigate('/employees');
+        }}
       />
     </div>
   );

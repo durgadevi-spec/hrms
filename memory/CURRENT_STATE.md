@@ -1,11 +1,47 @@
 # Current Project State: CTI HRMS
-*Last Updated: 2026-10-26*
+*Last Updated: 2026-10-29*
 
 ## 1. Active Focus
+- Reduce initial loading delays on Employees and Admin Dashboard.
 - Verification of dynamic category-tailored asset forms across inventory.
 - Direct Supabase document storage integration.
 
 ## 2. Recently Completed
+- **Admin Dashboard Summary Card Filters**:
+  - Made the five remaining summary cards clickable to filter the employee list by the related metric: total employees, leave status, or today's timesheets.
+  - Removed the Overdue Tasks and Active Projects summary cards as requested.
+  - Highlighted the selected card and added a Clear card filter action; clicking a card shows all statuses by default while retaining the other employee filters.
+- **Employees & Admin Dashboard Progressive Loading**:
+  - Employees now show the roster as soon as the employee endpoint responds; LMS leave/status data is fetched independently in the background.
+  - Admin Dashboard now waits only for employee data before rendering. Departments, LMS leaves, TimeStrap timesheets, PMS projects/assignments/tasks, and employee sync status load independently afterward.
+  - LMS/PMS sync badges show a pending ellipsis until the integration status request completes, instead of briefly displaying false “not synced” marks.
+- **Employee Form Full-Screen Alignment Fix**:
+  - Rendered the employee profile dialog in a document-level portal so transformed app layout ancestors cannot constrain its fixed positioning.
+  - Full-screen mode now uses viewport width and dynamic viewport height, removes modal margins/borders, and disables the scale animation.
+- **Employee Form Full-Screen Toggle**:
+  - Added a header control to expand the existing Add/Edit Employee Profile dialog to the full viewport and restore its default size.
+  - Kept the form contents, save actions, and default dialog layout unchanged.
+- **Employee Profile Save Feedback**:
+  - Added visible saving progress and success/error messages for Save as Draft and Complete Profile actions.
+  - Disabled repeated save actions while a request is in progress and added a synchronous guard against duplicate saves.
+  - Save status clears when form data is edited; existing API save flow and success/error handling remain in place.
+- **Employee Shift Start & End Times**:
+  - Added optional shift start/end time inputs to the existing employee Job Details form without removing or changing other employee fields.
+  - Saved values as `shift_start_time` and `shift_end_time` on `employee_job_details`, and loaded them into the profile edit form.
+  - Added the columns to the fresh-schema migration and `db_updates.sql`; existing Supabase installations need the two `ALTER TABLE` statements in `db_updates.sql` run in the SQL Editor before saving shift times.
+- **Employee Profile Overview & Read-Only Details Dialog**:
+  - Added shift hours to the employee profile overview.
+  - Added a separate, scrollable View Details dialog for readable personal, job/shift, identity, salary (when authorized), emergency contact, education, experience, certification, attachment, and asset information.
+  - Kept the existing Edit Info action and the other profile actions unchanged.
+- **Searchable, Scrollable Employee Select Dropdowns**:
+  - Created reusable [`SearchableEmployeeSelect.tsx`](file:///c:/Users/Hello/Downloads/hrms/src/components/common/SearchableEmployeeSelect.tsx) with custom scrollable dropdown list (`max-h-60 overflow-y-auto`) and built-in search bar.
+  - Replaced native unscrollable `<select>` across `Projects.tsx`, `Leaves.tsx` (both Leave History & Permissions tabs), and `Timesheets.tsx` (Organization Overview & Employee Drill-Down).
+  - Ensured inactive employees are excluded from selection lists in Projects, Leaves, and Timesheets.
+- **Admin Dashboard Status Dropdown**:
+  - Styled Status filter as a clean `<select>` dropdown matching Department and Designation in both the main grid filter bar and the employee detail sidebar.
+- **Default Active Employees Filter**:
+  - `src/pages/Employees.tsx`: Set default `statusFilter` to `'active'`. Only active employees display by default. The Total, Active, On Leave, and Inactive summary cards allow 1-click filtering.
+  - `src/pages/AdminDashboard.tsx`: Added `statusFilter` (`active` by default).
 - **Pushed to GitHub (`durgadevi-spec/hrms`)**:
   - Commit `01b48d1` pushed to `origin/main` (`https://github.com/durgadevi-spec/hrms.git`) using `navee-n20`.
   - Staged and pushed dynamic asset category forms, Lottie animations, Supabase direct storage client, and agent memory documentation.

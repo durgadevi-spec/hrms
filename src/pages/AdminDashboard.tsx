@@ -22,6 +22,7 @@ function AdminDashboardView() {
   // const [syncSummary, setSyncSummary] = useState<any>(null);
 
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingSyncStatus, setIsLoadingSyncStatus] = useState(true);
   const [selectedEmp, setSelectedEmp] = useState<any>(null);
 
   // Selected Employee Details Tabs
@@ -31,6 +32,10 @@ function AdminDashboardView() {
   const [searchQuery, setSearchQuery] = useState('');
   const [deptFilter, setDeptFilter] = useState('all');
   const [designationFilter, setDesignationFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState<'active' | 'all' | 'inactive'>('active');
+  const [summaryCardFilter, setSummaryCardFilter] = useState<
+    'totalEmployees' | 'onLeaveToday' | 'pendingLeaves' | 'submittedToday' | 'notSubmittedToday' | null
+  >(null);
 
   // Detail View Sub-Filters
   const [leavesFilter, setLeavesFilter] = useState('all');
@@ -40,53 +45,79 @@ function AdminDashboardView() {
   const [timesheetYear, setTimesheetYear] = useState<number>(new Date().getFullYear());
 
   useEffect(() => {
+    let isMounted = true;
     const fetchAdminData = async () => {
       try {
         setIsLoading(true);
-        const [emp, depts, leaves, ts, prj, asgn, tsk, syncData] = await Promise.all([
-          api.get('/api/employees').catch(() => []),
-          api.get('/api/departments').catch(() => []),
-          api.get('/api/leave-requests').catch(() => ({ balances: [], history: [], permissions: [], lmsUsers: [] })),
-          api.get('/api/timesheets?scope=org').catch(() => ({ dailyPlans: [], planTasks: [], dailySubmissions: [], timeEntries: [], timesheetSubmissions: [], employees: [] })),
-          api.get('/api/projects').catch(() => []),
-          api.get('/api/projects/assignments/all').catch(() => []),
-          api.get('/api/tasks').catch(() => []),
-          api.get('/api/admin/employee-sync').catch(() => ({ employees: [], summary: null }))
-        ]);
-
-        const safeEmp = Array.isArray(emp) ? emp : [];
-        const safeDepts = Array.isArray(depts) ? depts : [];
-        const safeLeaves = leaves && typeof leaves === 'object' ? leaves : { balances: [], history: [], permissions: [], lmsUsers: [] };
-        const safePrj = Array.isArray(prj) ? prj : [];
-        const safeAsgn = Array.isArray(asgn) ? asgn : [];
-        const safeTsk = Array.isArray(tsk) ? tsk : [];
-
-        // Merge sync flags into employees list
-        const syncMap: Record<string, { inLms: boolean; inPms: boolean }> = {};
-        ((syncData && syncData.employees) || []).forEach((s: any) => {
-          syncMap[s.id] = { inLms: s.inLms, inPms: s.inPms };
+        const emp = await api.get('/api/employees').catch(error => {
+          console.error('Failed to load dashboard employees', error);
+          return [];
         });
-        const enrichedEmps = safeEmp.map((e: any) => ({
-          ...e,
-          inLms: syncMap[e.id]?.inLms ?? false,
-          inPms: syncMap[e.id]?.inPms ?? false,
-        }));
 
-        setEmployees(enrichedEmps);
-        setDepartments(safeDepts);
-        setLeavesData(safeLeaves);
-        setTimesheets(ts || []);
-        setProjects(safePrj);
-        setProjectAssignments(safeAsgn);
-        setTasks(safeTsk);
-        // setSyncSummary(syncData.summary || null);
+        if (!isMounted) return;
+        const safeEmp = Array.isArray(emp) ? emp : [];
+        setEmployees(safeEmp);
+        setIsLoading(false);
+
+        const loadSection = (
+          url: string,
+          fallback: any,
+          onLoad: (data: any) => void,
+          label: string
+        ) => {
+          api.get(url)
+            .then(data => {
+              if (isMounted) onLoad(data);
+            })
+            .catch(error => {
+              console.error(`Failed to load ${label}`, error);
+              if (isMounted) onLoad(fallback);
+            });
+        };
+
+        loadSection('/api/departments', [], data => setDepartments(Array.isArray(data) ? data : []), 'dashboard departments');
+        loadSection('/api/leave-requests', { balances: [], history: [], permissions: [], lmsUsers: [] },
+          data => setLeavesData(data && typeof data === 'object' ? data : { balances: [], history: [], permissions: [], lmsUsers: [] }),
+          'dashboard leave data');
+        loadSection('/api/timesheets?scope=org', { dailyPlans: [], planTasks: [], dailySubmissions: [], timeEntries: [], timesheetSubmissions: [], employees: [] },
+          data => setTimesheets(data || []), 'dashboard timesheets');
+        loadSection('/api/projects', [], data => setProjects(Array.isArray(data) ? data : []), 'dashboard projects');
+        loadSection('/api/projects/assignments/all', [], data => setProjectAssignments(Array.isArray(data) ? data : []), 'dashboard project assignments');
+        loadSection('/api/tasks', [], data => setTasks(Array.isArray(data) ? data : []), 'dashboard tasks');
+
+        api.get('/api/admin/employee-sync')
+          .then(syncData => {
+            if (!isMounted) return;
+            const syncMap: Record<string, { inLms: boolean; inPms: boolean }> = {};
+            ((syncData && syncData.employees) || []).forEach((s: any) => {
+              syncMap[s.id] = { inLms: s.inLms, inPms: s.inPms };
+            });
+            setEmployees(current => current.map((e: any) => ({
+              ...e,
+              inLms: syncMap[e.id]?.inLms ?? false,
+              inPms: syncMap[e.id]?.inPms ?? false,
+            })));
+            setSelectedEmp((current: any) => current ? {
+              ...current,
+              inLms: syncMap[current.id]?.inLms ?? false,
+              inPms: syncMap[current.id]?.inPms ?? false,
+            } : current);
+          })
+          .catch(error => console.error('Failed to load employee sync status', error))
+          .finally(() => {
+            if (isMounted) setIsLoadingSyncStatus(false);
+          });
       } catch (err) {
         console.error('Failed to load admin dashboard data', err);
+        if (isMounted) setIsLoadingSyncStatus(false);
       } finally {
-        setIsLoading(false);
+        if (isMounted) {
+          setIsLoading(false);
+        }
       }
     };
     fetchAdminData();
+    return () => { isMounted = false; };
   }, []);
 
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
@@ -150,29 +181,14 @@ function AdminDashboardView() {
     }).length;
     const notSubmittedTodayCount = Math.max(0, activeEmployees.length - submittedTodayCount);
 
-    // Overdue Tasks: employees with at least one overdue task
-    const overdueTasks = tasks.filter((t: any) => {
-      const isPending = t.status !== 'completed';
-      const isPast = t.dueDate ? t.dueDate.split('T')[0] < todayStr : false;
-      return isPending && isPast;
-    });
-    const uniqueOverdueEmployees = new Set(overdueTasks.map((t: any) => t.assignedTo).filter(Boolean));
-
-    // Active Projects: unique employees assigned to active/delayed projects
-    const activeProjectIds = new Set(projects.filter(p => ['active', 'delayed'].includes(p.status)).map(p => p.id));
-    const uniqueActiveProjEmployees = new Set(
-      projectAssignments.filter(pa => activeProjectIds.has(pa.projectId)).map((pa: any) => pa.employeeId).filter(Boolean)
-    );
-
     return {
       totalEmployees: employees.length,
       activeEmployees: activeEmployees.length,
+      inactiveEmployees: employees.filter(e => (e.status || '').toLowerCase() === 'inactive').length,
       onLeaveToday: employeesOnLeaveTodayCount,
       pendingLeaves: uniquePendingEmployees.size,
       submittedToday: submittedTodayCount,
-      notSubmittedToday: notSubmittedTodayCount,
-      overdueTasks: uniqueOverdueEmployees.size,
-      activeProjects: uniqueActiveProjEmployees.size
+      notSubmittedToday: notSubmittedTodayCount
     };
   }, [employees, leavesData, timesheets, tasks, projects, projectAssignments, todayStr]);
 
@@ -196,9 +212,47 @@ function AdminDashboardView() {
       const matchesDept = deptFilter === 'all' || e.departmentId === deptFilter;
       const matchesDesg = designationFilter === 'all' || e.designation === designationFilter;
 
-      return matchesSearch && matchesDept && matchesDesg;
+      const empStatus = (e.status || 'active').toLowerCase();
+      const matchesStatus =
+        statusFilter === 'all' ? true :
+        statusFilter === 'inactive' ? empStatus === 'inactive' :
+        empStatus !== 'inactive';
+
+      const lmsUserId = getLmsUserIdFromEmployee(e);
+      const tsUserId = getTsUserIdFromEmployee(e);
+      const employeeTimesheets = Array.isArray(timesheets) ? timesheets : (timesheets?.timeEntries || []);
+      const hasTimesheetToday = Boolean(tsUserId && employeeTimesheets.some((t: { employeeId: string; date?: string; status: string }) => (
+        t.employeeId === tsUserId &&
+        (t.date ? t.date.split('T')[0] : '') === todayStr &&
+        ['draft', 'pending', 'submitted', 'approved', 'manager_approved'].includes(t.status)
+      )));
+      const matchesSummaryCard = (() => {
+        switch (summaryCardFilter) {
+          case 'totalEmployees':
+            return true;
+          case 'onLeaveToday':
+            return empStatus === 'active' && Boolean(lmsUserId) && (leavesData.history || []).some((l: { userId: string; status?: string; startDate?: string; endDate?: string }) => (
+              l.userId === lmsUserId &&
+              (l.status || '').toLowerCase() === 'approved' &&
+              (l.startDate ? l.startDate.split('T')[0] : '') <= todayStr &&
+              (l.endDate ? l.endDate.split('T')[0] : '') >= todayStr
+            ));
+          case 'pendingLeaves':
+            return Boolean(lmsUserId) && (leavesData.history || []).some((l: { userId: string; status?: string }) => (
+              l.userId === lmsUserId && (l.status || '').toLowerCase() === 'pending'
+            ));
+          case 'submittedToday':
+            return empStatus === 'active' && hasTimesheetToday;
+          case 'notSubmittedToday':
+            return empStatus === 'active' && !hasTimesheetToday;
+          default:
+            return true;
+        }
+      })();
+
+      return matchesSearch && matchesDept && matchesDesg && matchesStatus && matchesSummaryCard;
     });
-  }, [employees, searchQuery, deptFilter, designationFilter]);
+  }, [employees, searchQuery, deptFilter, designationFilter, statusFilter, summaryCardFilter, leavesData, timesheets, todayStr]);
 
   // 3. Selected Employee Specific Data & Metrics
   const selectedEmployeeData = useMemo(() => {
@@ -443,17 +497,29 @@ function AdminDashboardView() {
       </div>
 
       {/* ── Dashboard Summary Cards ── */}
-      <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-5 gap-4">
         {[
-          { label: 'Total Employees', value: stats.totalEmployees, sub: `${stats.activeEmployees} active`, icon: Users, color: 'text-blue-600 bg-blue-50 dark:bg-blue-900/10' },
-          { label: 'On Leave Today', value: stats.onLeaveToday, sub: 'employees', icon: CalendarX, color: 'text-rose-600 bg-rose-50 dark:bg-rose-900/10' },
-          { label: 'Pending Leaves', value: stats.pendingLeaves, sub: 'needs approval', icon: Clock, color: 'text-amber-600 bg-amber-50 dark:bg-amber-900/10' },
-          { label: 'Submitted Today', value: stats.submittedToday, sub: 'timesheets', icon: CheckCircle2, color: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-900/10' },
-          { label: 'Not Submitted', value: stats.notSubmittedToday, sub: 'outstanding', icon: X, color: 'text-gray-600 bg-gray-50 dark:bg-surface-800' },
-          { label: 'Overdue Tasks', value: stats.overdueTasks, sub: 'items delayed', icon: AlertTriangle, color: 'text-red-600 bg-red-50 dark:bg-red-900/10' },
-          { label: 'Active Projects', value: stats.activeProjects, sub: 'engaged team', icon: FolderKanban, color: 'text-primary-600 bg-primary-50 dark:bg-primary-900/10' },
-        ].map((item, idx) => (
-          <div key={idx} className="bg-white dark:bg-surface-900 rounded-2xl p-4 border border-surface-100 dark:border-surface-800 shadow-sm flex flex-col justify-between">
+          { filter: 'totalEmployees', label: 'Total Employees', value: stats.totalEmployees, sub: `${stats.activeEmployees} active`, icon: Users, color: 'text-blue-600 bg-blue-50 dark:bg-blue-900/10' },
+          { filter: 'onLeaveToday', label: 'On Leave Today', value: stats.onLeaveToday, sub: 'employees', icon: CalendarX, color: 'text-rose-600 bg-rose-50 dark:bg-rose-900/10' },
+          { filter: 'pendingLeaves', label: 'Pending Leaves', value: stats.pendingLeaves, sub: 'needs approval', icon: Clock, color: 'text-amber-600 bg-amber-50 dark:bg-amber-900/10' },
+          { filter: 'submittedToday', label: 'Submitted Today', value: stats.submittedToday, sub: 'timesheets', icon: CheckCircle2, color: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-900/10' },
+          { filter: 'notSubmittedToday', label: 'Not Submitted', value: stats.notSubmittedToday, sub: 'outstanding', icon: X, color: 'text-gray-600 bg-gray-50 dark:bg-surface-800' },
+        ].map((item) => (
+          <button
+            key={item.filter}
+            type="button"
+            aria-pressed={summaryCardFilter === item.filter}
+            onClick={() => {
+              setSummaryCardFilter(item.filter as typeof summaryCardFilter);
+              setStatusFilter('all');
+            }}
+            className={cn(
+              'text-left bg-white dark:bg-surface-900 rounded-2xl p-4 border shadow-sm flex flex-col justify-between transition-all hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500',
+              summaryCardFilter === item.filter
+                ? 'border-primary-500 ring-2 ring-primary-500/20'
+                : 'border-surface-100 dark:border-surface-800'
+            )}
+          >
             <div className="flex justify-between items-start mb-2">
               <div className={cn('p-2.5 rounded-xl shrink-0', item.color)}>
                 <item.icon className="w-5 h-5" />
@@ -464,7 +530,7 @@ function AdminDashboardView() {
               <p className="text-xs font-semibold text-secondary-700 dark:text-surface-300 line-clamp-1">{item.label}</p>
               <p className="text-[10px] text-secondary-400 mt-0.5">{item.sub}</p>
             </div>
-          </div>
+          </button>
         ))}
       </div>
 
@@ -490,6 +556,18 @@ function AdminDashboardView() {
               </div>
               {/* Filters */}
               <div className="flex flex-wrap gap-3 items-end">
+                <div>
+                  <label className="block text-xs font-semibold text-secondary-500 mb-1">Status</label>
+                  <select
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value as any)}
+                    className="input-field py-1.5 px-2 bg-surface-50 dark:bg-surface-800 text-xs text-secondary-950 dark:text-white"
+                  >
+                    <option value="active">Active ({stats.activeEmployees})</option>
+                    <option value="all">All ({stats.totalEmployees})</option>
+                    <option value="inactive">Inactive ({stats.inactiveEmployees})</option>
+                  </select>
+                </div>
                 <div>
                   <label className="block text-xs font-semibold text-secondary-500 mb-1">Department</label>
                   <select
@@ -526,6 +604,15 @@ function AdminDashboardView() {
               <Users className="w-5 h-5 text-primary-600" />
               Employees ({filteredEmployees.length})
             </h2>
+            {summaryCardFilter && (
+              <button
+                type="button"
+                onClick={() => { setSummaryCardFilter(null); setStatusFilter('active'); }}
+                className="text-xs font-semibold text-primary-600 hover:text-primary-700 dark:text-primary-400"
+              >
+                Clear card filter
+              </button>
+            )}
           </div>
 
           {/* Employee Cards Grid */}
@@ -659,6 +746,15 @@ function AdminDashboardView() {
                 <Users className="w-5 h-5 text-primary-600" />
                 Employees ({filteredEmployees.length})
               </h2>
+              {summaryCardFilter && (
+                <button
+                  type="button"
+                  onClick={() => { setSummaryCardFilter(null); setStatusFilter('active'); }}
+                  className="text-xs font-semibold text-primary-600 hover:text-primary-700 dark:text-primary-400"
+                >
+                  Clear card filter
+                </button>
+              )}
             </div>
 
             {/* Search Box */}
@@ -674,7 +770,19 @@ function AdminDashboardView() {
             </div>
 
             {/* Filters */}
-            <div className="grid grid-cols-2 gap-2 text-xs">
+            <div className="grid grid-cols-3 gap-2 text-xs">
+              <div>
+                <label className="block font-semibold text-secondary-500 mb-1">Status</label>
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value as any)}
+                  className="input-field py-1.5 px-2 bg-surface-50 dark:bg-surface-800 text-xs text-secondary-950 dark:text-white"
+                >
+                  <option value="active">Active</option>
+                  <option value="all">All</option>
+                  <option value="inactive">Inactive</option>
+                </select>
+              </div>
               <div>
                 <label className="block font-semibold text-secondary-500 mb-1">Department</label>
                 <select
@@ -802,19 +910,23 @@ function AdminDashboardView() {
                     </div>
                     <span className={cn(
                       'text-xs font-bold px-2.5 py-1.5 rounded-lg border',
-                      selectedEmp.inLms
-                        ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-300 dark:border-blue-800'
-                        : 'bg-surface-50 text-secondary-400 border-surface-200 dark:bg-surface-800 dark:text-surface-500'
+                      isLoadingSyncStatus
+                        ? 'bg-surface-50 text-secondary-400 border-surface-200 dark:bg-surface-800 dark:text-surface-500'
+                        : selectedEmp.inLms
+                          ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-300 dark:border-blue-800'
+                          : 'bg-surface-50 text-secondary-400 border-surface-200 dark:bg-surface-800 dark:text-surface-500'
                     )}>
-                      {selectedEmp.inLms ? '✓' : '✗'} LMS
+                      {isLoadingSyncStatus ? '…' : selectedEmp.inLms ? '✓' : '✗'} LMS
                     </span>
                     <span className={cn(
                       'text-xs font-bold px-2.5 py-1.5 rounded-lg border',
-                      selectedEmp.inPms
-                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-300 dark:border-emerald-800'
-                        : 'bg-surface-50 text-secondary-400 border-surface-200 dark:bg-surface-800 dark:text-surface-500'
+                      isLoadingSyncStatus
+                        ? 'bg-surface-50 text-secondary-400 border-surface-200 dark:bg-surface-800 dark:text-surface-500'
+                        : selectedEmp.inPms
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-300 dark:border-emerald-800'
+                          : 'bg-surface-50 text-secondary-400 border-surface-200 dark:bg-surface-800 dark:text-surface-500'
                     )}>
-                      {selectedEmp.inPms ? '✓' : '✗'} PMS
+                      {isLoadingSyncStatus ? '…' : selectedEmp.inPms ? '✓' : '✗'} PMS
                     </span>
                   </div>
                 </div>

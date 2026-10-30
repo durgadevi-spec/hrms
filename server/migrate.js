@@ -151,6 +151,8 @@ async function migrate() {
           reporting_manager_id UUID REFERENCES employees(id),
           branch VARCHAR(100),
           work_location VARCHAR(100),
+          shift_start_time TIME,
+          shift_end_time TIME,
           work_mode work_mode_enum,
           shift VARCHAR(50),
           cost_center VARCHAR(100),

@@ -8,6 +8,10 @@
 ALTER TABLE employees ADD COLUMN IF NOT EXISTS profile_picture TEXT;
 ALTER TABLE employees ADD COLUMN IF NOT EXISTS passport_scan TEXT;
 
+-- 2. Store employee shift start and end times separately from the shift label
+ALTER TABLE employee_job_details ADD COLUMN IF NOT EXISTS shift_start_time TIME;
+ALTER TABLE employee_job_details ADD COLUMN IF NOT EXISTS shift_end_time TIME;
+
 -- 2. Create the assets table (if not already present)
 CREATE TABLE IF NOT EXISTS assets (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -1,6 +1,6 @@
 import fetch from 'node-fetch';
 import * as dotenv from 'dotenv';
-dotenv.config();
+dotenv.config({ override: true });
 
 /**
  * Normalizes phone numbers to Meta WhatsApp international format (e.g. 919876543210)
